@@ -1,0 +1,58 @@
+{
+  "name": "claude-code-manager",
+  "version": "0.1.0",
+  "description": "Desktop manager for Claude Code sessions, memory and stats",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/",
+    "postinstall": "electron-builder install-app-deps",
+    "pack": "electron-builder --mac dir",
+    "dist": "electron-builder --mac dmg",
+    "icon": "electron build/icon-render.js",
+    "install-app": "sh scripts/install-app.sh",
+    "sync-sdk": "sh scripts/sync-sdk.sh"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.302",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "marked": "18.1.0",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3"
+  },
+  "productName": "Claude Code Manager",
+  "build": {
+    "appId": "local.claude-code-manager",
+    "productName": "Claude Code Manager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**",
+      "package.json",
+      "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**",
+      "src/webview-preload.js"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "target": [
+        "dir"
+      ],
+      "darkModeSupport": true,
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    }
+  },
+  "author": "minkyu"
+}

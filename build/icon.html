@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent;width:1024px;height:1024px;overflow:hidden}</style></head>
+<body><svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#262b36"/><stop offset="1" stop-color="#111317"/></linearGradient>
+    <linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0a07a"/><stop offset="1" stop-color="#d97757"/></linearGradient>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity=".45"/></filter>
+  </defs>
+  <!-- macOS squircle-ish tile: 824px with 185px corners, centered (standard Big Sur padding) -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#sh)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="none" stroke="#3a4150" stroke-width="6"/>
+  <!-- three session tabs along the top -->
+  <rect x="190" y="196" width="150" height="46" rx="14" fill="#1b1f26" stroke="#3a4150" stroke-width="5"/>
+  <rect x="356" y="196" width="150" height="46" rx="14" fill="#1b1f26" stroke="#3a4150" stroke-width="5"/>
+  <rect x="522" y="196" width="150" height="46" rx="14" fill="#111317" stroke="#d97757" stroke-width="6"/>
+  <circle cx="221" cy="219" r="9" fill="#4caf7d"/><circle cx="387" cy="219" r="9" fill="#e0b341"/><circle cx="553" cy="219" r="9" fill="#d97757"/>
+  <!-- prompt chevron + cursor -->
+  <path d="M250 400 L430 540 L250 680" fill="none" stroke="url(#acc)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="490" y="612" width="250" height="68" rx="16" fill="#d7dae0"/>
+  <!-- fleet glyph -->
+  <text x="790" y="470" font-family="-apple-system, Helvetica, Arial" font-size="190" font-weight="700" fill="#4caf7d" text-anchor="middle">✱</text>
+</svg></body></html>
