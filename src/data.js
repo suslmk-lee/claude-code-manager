@@ -12,29 +12,43 @@ const PROJECTS = path.join(HOME, 'projects');
 const JOBS = path.join(HOME, 'jobs');
 let CACHE = path.join(os.tmpdir(), 'claude-code-manager-cache');
 
-const EXTRA_PATH = [path.join(os.homedir(), '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin'];
+const IS_WIN = process.platform === 'win32';
+const EXTRA_PATH = IS_WIN
+  ? [path.join(process.env.USERPROFILE || os.homedir(), '.local', 'bin'), process.env.APPDATA && path.join(process.env.APPDATA, 'npm'), process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'claude')].filter(Boolean)
+  : [path.join(os.homedir(), '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin'];
 // Markers a parent Claude Code session puts into its children's environment. If this app was launched from
 // inside a Claude Code session (e.g. `npm start` in its terminal), the sessions we spawn would inherit them and
 // run as "child sessions" with transcript saving off. They are never meant for the sessions we start.
 const SESSION_MARKERS = /^(CLAUDECODE|CLAUDE_PID|CLAUDE_JOB_DIR|CLAUDE_EFFORT|CLAUDE_CODE_(CHILD_SESSION|ENTRYPOINT|EXECPATH|MESSAGING_SOCKET|MESSAGING_TOKEN|SESSION_ATTENDED|SESSION_ID|SSE_PORT))$/;
 function env() {
   const e = {};
-  for (const [k, v] of Object.entries(process.env)) if (!SESSION_MARKERS.test(k)) e[k] = v;
-  e.PATH = [...EXTRA_PATH, process.env.PATH || ''].join(':');
+  let pk = 'PATH', pv = ''; // Windows env keys are case-insensitive (`Path`): a plain-object copy must hold exactly one PATH-like key
+  for (const [k, v] of Object.entries(process.env)) {
+    if (SESSION_MARKERS.test(k)) continue;
+    if (k === 'PATH' || (IS_WIN && k.toUpperCase() === 'PATH')) { if (!pv) { pk = k; pv = v || ''; } } else e[k] = v;
+  }
+  e[pk] = [...EXTRA_PATH, pv].join(path.delimiter);
   return e;
 }
+const isCmd = (bin) => IS_WIN && /\.(cmd|bat)$/i.test(bin);
 function findClaude() {
   if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN;
-  for (const d of EXTRA_PATH) {
-    const p = path.join(d, 'claude');
-    if (fs.existsSync(p)) return p;
+  const dirs = IS_WIN ? [...EXTRA_PATH, ...(process.env.PATH || '').split(path.delimiter).filter(Boolean)] : EXTRA_PATH;
+  for (const name of IS_WIN ? ['claude.exe', 'claude.cmd'] : ['claude']) { // prefer .exe: .cmd needs a shell
+    for (const d of dirs) {
+      const p = path.join(d, name);
+      if (fs.existsSync(p)) return p;
+    }
   }
   return 'claude';
 }
 
 function claude(args, opts = {}) {
   return new Promise((resolve) => {
-    execFile(findClaude(), args, { env: env(), cwd: opts.cwd, maxBuffer: 64 << 20 }, (err, stdout, stderr) => {
+    let bin = findClaude(), a = args;
+    const o = { env: env(), cwd: opts.cwd, maxBuffer: 64 << 20, windowsHide: true };
+    if (isCmd(bin)) { o.shell = true; bin = `"${bin}"`; a = args.map((x) => `"${String(x).replace(/"/g, '""')}"`); } // Node refuses .cmd/.bat without a shell; quote for cmd.exe
+    execFile(bin, a, o, (err, stdout, stderr) => {
       resolve({ code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr) });
     });
   });
@@ -50,7 +64,13 @@ async function readJson(file, fallback) {
 async function writeAtomic(file, text) {
   const tmp = `${file}.${process.pid}.tmp`;
   await fsp.writeFile(tmp, text);
-  await fsp.rename(tmp, file);
+  for (let n = 0; ; n++) {
+    try { return await fsp.rename(tmp, file); } catch (e) {
+      // Windows: the target may be briefly open elsewhere (antivirus, readers) → EPERM/EBUSY/EACCES; retry
+      if (!IS_WIN || n >= 6 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) { await fsp.rm(tmp, { force: true }); throw e; }
+      await new Promise((r) => setTimeout(r, 40 * (n + 1)));
+    }
+  }
 }
 
 // ---------- sessions ----------
@@ -66,7 +86,7 @@ async function readHistory() {
   const bySession = new Map();
   let text = '';
   try { text = await fsp.readFile(path.join(HOME, 'history.jsonl'), 'utf8'); } catch { return bySession; }
-  for (const line of text.split('\n')) {
+  for (const line of text.split(/\r?\n/)) {
     if (!line) continue;
     let d; try { d = JSON.parse(line); } catch { continue; }
     if (!d.sessionId) continue;
@@ -88,7 +108,7 @@ async function readTailTitle(file, bytes = 65536) {
     const buf = Buffer.alloc(size - start);
     await fh.read(buf, 0, buf.length, start);
     const out = {};
-    for (const line of buf.toString('utf8').split('\n')) {
+    for (const line of buf.toString('utf8').split(/\r?\n/)) {
       if (!/"type":"(custom-title|ai-title|permission-mode|pr-link|assistant|user)"/.test(line)) continue;
       try {
         const d = JSON.parse(line);
@@ -135,10 +155,10 @@ async function account() {
 }
 const gitCache = new Map(); // cwd → { at, info }
 async function gitInfo(cwd) {
-  if (!cwd || !cwd.startsWith('/')) return null;
+  if (!cwd || !path.isAbsolute(cwd)) return null;
   const c = gitCache.get(cwd);
   if (c && Date.now() - c.at < 15000) return c.info;
-  const run = (args) => new Promise((res) => execFile('git', ['-C', cwd, ...args], { env: env(), timeout: 4000 }, (e, out) => res(e ? null : String(out))));
+  const run = (args) => new Promise((res) => execFile('git', ['-C', cwd, ...args], { env: env(), timeout: 4000, windowsHide: true }, (e, out) => res(e ? null : String(out))));
   const branch = (await run(['rev-parse', '--abbrev-ref', 'HEAD']))?.trim();
   const info = branch ? { branch, dirty: !!(await run(['status', '--porcelain', '--untracked-files=no']))?.trim() } : null;
   gitCache.set(cwd, { at: Date.now(), info });
@@ -216,7 +236,7 @@ async function listSessions() {
     const h = history.get(s.sessionId);
     if (h) Object.assign(s, { cwd: s.cwd || h.project, prompts: h.prompts, firstPrompt: h.firstPrompt, lastPrompt: h.lastPrompt, historyLastTs: h.lastTs });
     if (!s.cwd && s.projectDir) s.cwd = s.projectDir; // ponytail: encoded dir as last-resort label
-    if (!s.projectDir && s.cwd?.startsWith('/')) s.projectDir = encodeProject(s.cwd); // agent-only sessions (no transcript yet) still belong to a project
+    if (!s.projectDir && s.cwd && path.isAbsolute(s.cwd)) s.projectDir = encodeProject(s.cwd); // agent-only sessions (no transcript yet) still belong to a project
     const autoNamed = !s.agentName || s.agentName === s.short || s.kind === 'interactive';
     s.name = (autoNamed && s.customTitle) ? s.customTitle : (s.agentName || s.customTitle || s.aiTitle || (s.firstPrompt || '').slice(0, 60) || s.short);
     // last conversation time: last message record or last prompt; start time / file mtime only for sessions without a message yet
@@ -414,15 +434,37 @@ async function transcript(sessionId, { from, limit = 200 } = {}) {
   const start = from == null ? Math.max(0, turns.length - limit) : Math.max(0, Math.min(from, turns.length));
   return { total: turns.length, from: start, turns: turns.slice(start, start + limit) };
 }
+// Pure-Node stand-in for `grep -l -i -F` (no grep on Windows): streams the file, keeping a needle-sized overlap between chunks.
+function fileHas(file, needle) {
+  return new Promise((resolve) => {
+    let tail = '', found = false;
+    const stream = fs.createReadStream(file, { encoding: 'utf8' });
+    stream.on('data', (chunk) => {
+      const t = (tail + chunk).toLowerCase();
+      if (t.includes(needle)) { found = true; stream.destroy(); } else tail = t.slice(-(needle.length - 1));
+    });
+    stream.on('close', () => resolve(found));
+    stream.on('error', () => resolve(false));
+  });
+}
+async function nodeGrep(files, needle) {
+  const hits = new Set();
+  for (let i = 0; i < files.length; i += 8) await Promise.all(files.slice(i, i + 8).map(async (f) => { if (await fileHas(f, needle)) hits.add(path.normalize(f)); }));
+  return hits;
+}
 // Full-text search: grep narrows the files, then the parsed turns give role-aware snippets.
-async function searchTranscripts(q, { limit = 300, perSession = 30 } = {}) {
+// `grep: false` (default on Windows, or when grep is missing) uses the Node fallback.
+async function searchTranscripts(q, { limit = 300, perSession = 30, grep = !IS_WIN } = {}) {
   q = String(q || '').trim();
   if (q.length < 2) return [];
   const sessions = (await listSessions()).filter((s) => s.file);
-  const hits = await new Promise((res) => execFile('grep', ['-l', '-i', '-F', '--', q, ...sessions.map((s) => s.file)], { maxBuffer: 1 << 24 }, (_e, out) => res(new Set(String(out || '').split('\n').filter(Boolean)))));
-  const needle = q.toLowerCase(), out = [];
+  const needle = q.toLowerCase(), out = [], files = sessions.map((s) => s.file);
+  const hits = grep ? await new Promise((res) => execFile('grep', ['-l', '-i', '-F', '--', q, ...files], { maxBuffer: 1 << 24 }, (e, o) => {
+    if (e && e.code !== 1 && !o) return res(nodeGrep(files, needle)); // grep missing/failed with no output (exit 1 = just no match)
+    res(new Set(String(o || '').split(/\r?\n/).filter(Boolean).map((f) => path.normalize(f))));
+  })) : await nodeGrep(files, needle);
   for (const s of sessions) {
-    if (!hits.has(s.file)) continue;
+    if (!hits.has(path.normalize(s.file))) continue;
     let n = 0;
     for (const t of await loadTurns(s.file, s.sessionId)) {
       const k = t.text.toLowerCase().indexOf(needle);
@@ -437,16 +479,22 @@ async function searchTranscripts(q, { limit = 300, perSession = 30 } = {}) {
 
 // ---------- memory ----------
 
+// `---\n` / `---\r\n` opener + `\n---` closer → { start: first fm char, end: end of fm text (before any CR), nl: index of the closer's newline }
+function frontmatterSpan(text) {
+  const m = /^---\r?\n/.exec(text);
+  if (!m) return null;
+  const nl = text.indexOf('\n---', m[0].length);
+  return nl === -1 ? null : { start: m[0].length, end: text[nl - 1] === '\r' && nl - 1 >= m[0].length ? nl - 1 : nl, nl };
+}
 function parseFrontmatter(text) {
   const meta = {};
-  if (!text.startsWith('---\n')) return { meta, body: text };
-  const end = text.indexOf('\n---', 4);
-  if (end === -1) return { meta, body: text };
-  for (const line of text.slice(4, end).split('\n')) {
+  const fm = frontmatterSpan(text);
+  if (!fm) return { meta, body: text };
+  for (const line of text.slice(fm.start, fm.end).split(/\r?\n/)) {
     const m = /^\s*([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
     if (m && m[2] !== '') meta[m[1]] = m[2].trim(); // ponytail: flat key/value, nested keys collapse
   }
-  return { meta, body: text.slice(end + 4).replace(/^\n+/, '') };
+  return { meta, body: text.slice(fm.nl + 4).replace(/^(\r?\n)+/, '') };
 }
 
 // encoded project dir → real cwd, learned from history.jsonl and running agents
@@ -493,7 +541,8 @@ async function listMemory() {
 
 function assertInsideProjects(file) {
   const r = path.resolve(file);
-  if (!r.startsWith(PROJECTS + path.sep) || !r.endsWith('.md')) throw new Error('path outside ~/.claude/projects');
+  const fold = (p) => IS_WIN ? p.toLowerCase() : p; // drive-letter case may differ on Windows
+  if (!fold(r).startsWith(fold(PROJECTS + path.sep)) || !r.endsWith('.md')) throw new Error('path outside ~/.claude/projects');
   return r;
 }
 
@@ -515,14 +564,15 @@ async function copyMemory({ src, destProjectDir, overwrite = false }) {
   const origin = `${path.basename(path.dirname(path.dirname(src)))}/memory/${base}`;
   const { meta } = parseFrontmatter(text);
   let out;
-  if (text.startsWith('---\n') && text.indexOf('\n---', 4) !== -1) {
-    const end = text.indexOf('\n---', 4);
-    const fm = text.slice(4, end).split('\n').filter((l) => !/^\s*copiedFrom:/.test(l));
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'; // keep the file's line endings
+  const span = frontmatterSpan(text);
+  if (span) {
+    const fm = text.slice(span.start, span.end).split(/\r?\n/).filter((l) => !/^\s*copiedFrom:/.test(l));
     const i = fm.findIndex((l) => /^metadata:\s*$/.test(l));
     if (i !== -1) fm.splice(i + 1, 0, `  copiedFrom: ${origin}`); else fm.push(`copiedFrom: ${origin}`);
-    out = `---\n${fm.join('\n')}${text.slice(end)}`;
+    out = `---${eol}${fm.join(eol)}${eol}${text.slice(span.nl + 1)}`;
   } else {
-    out = `---\ncopiedFrom: ${origin}\n---\n\n${text}`;
+    out = `---${eol}copiedFrom: ${origin}${eol}---${eol}${eol}${text}`;
   }
   await writeAtomic(dest, out);
   await syncIndexLine(destDir, base, meta, 'ensure');
@@ -534,7 +584,7 @@ async function copyMemory({ src, destProjectDir, overwrite = false }) {
 async function syncIndexLine(dir, base, meta, mode) {
   const index = path.join(dir, 'MEMORY.md');
   let idx = ''; try { idx = await fsp.readFile(index, 'utf8'); } catch { /* new index */ }
-  const lines = idx.split('\n');
+  const lines = idx.split(/\r?\n/);
   if (lines[lines.length - 1] === '') lines.pop();
   const i = lines.findIndex((l) => l.includes(`](${base})`));
   const line = `- [${meta.name || base.replace(/\.md$/, '')}](${base})${meta.description ? ` — ${meta.description}` : ''}`;
@@ -664,7 +714,7 @@ async function newSession(opts) {
 }
 
 module.exports = {
-  HOME, PROJECTS, env, findClaude, encodeProject, parseFrontmatter, ingest, emptyStats,
+  IS_WIN, HOME, PROJECTS, env, findClaude, encodeProject, parseFrontmatter, ingest, emptyStats,
   listSessions, listAgents, sessionStats, fileStats, globalStats, readPins, setPinned, listProjects, transcript, searchTranscripts, findTranscript, streamLines, ingestTurn, readTailTitle, usage, gitInfo, account, listMemory, readMemory, copyMemory, writeMemory, deleteMemory, createMemory, MEMORY_TYPES,
   agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; },
 };
