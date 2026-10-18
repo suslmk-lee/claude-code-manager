@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require('electron'); // sandboxed preload
 const on = (ch) => (cb) => { const h = (_e, p) => cb(p); ipcRenderer.on(ch, h); return () => ipcRenderer.off(ch, h); };
 
 contextBridge.exposeInMainWorld('api', {
+  platform: process.platform, // renderer has no Node: expose what it needs for paths and shortcut labels
+  home: process.env.USERPROFILE || process.env.HOME || '',
+  sep: process.platform === 'win32' ? '\\' : '/',
   listSessions: () => ipcRenderer.invoke('sessions:list'),
   sessionStats: (id) => ipcRenderer.invoke('session:stats', id),
   globalStats: () => ipcRenderer.invoke('stats:global'),

@@ -36,7 +36,7 @@ function ensureView(b) {
   v.addEventListener('dom-ready', () => { b.domReady = true; if (b.pendingUrl) { const u = b.pendingUrl; b.pendingUrl = null; v.loadURL(u); } });
   v.addEventListener('console-message', (e) => { // Electron levels: 0 verbose, 1 info, 2 warning, 3 error
     if (e.level < 2 || /^%cElectron Security Warning/.test(e.message)) return;
-    b.console.push({ level: e.level === 3 ? 'error' : 'warn', message: String(e.message).slice(0, 500), source: e.sourceId ? `${e.sourceId.split('/').pop()}:${e.line}` : '', ts: Date.now() });
+    b.console.push({ level: e.level === 3 ? 'error' : 'warn', message: String(e.message).slice(0, 500), source: e.sourceId ? `${e.sourceId.split(/[\\/]/).pop()}:${e.line}` : '', ts: Date.now() });
     if (b.console.length > 50) b.console.shift();
     renderToolbar(b);
   });
@@ -163,7 +163,7 @@ function renderChips(b) {
       p.kind === 'screenshot' ? el('span', { class: 'chip-sel', text: '📷 페이지 스크린샷' })
         : p.kind === 'console' ? el('span', { class: 'chip-sel', text: `콘솔 ${p.items.length}건` })
         : el('span', { class: 'chip-sel', text: `${p.tag}${p.id ? '#' + p.id : ''}${p.classes.slice(0, 2).map((c) => '.' + c).join('')}` }),
-      p.kind === 'element' && p.source?.chain?.length ? el('span', { class: 'chip-src', text: p.source.chain.slice(-2).join(' > ') + (p.source.loc ? ` · ${p.source.loc.split('/').pop()}` : '') }) : (p.source?.loc ? el('span', { class: 'chip-src', text: p.source.loc.split('/').pop() }) : null),
+      p.kind === 'element' && p.source?.chain?.length ? el('span', { class: 'chip-src', text: p.source.chain.slice(-2).join(' > ') + (p.source.loc ? ` · ${p.source.loc.split(/[\\/]/).pop()}` : '') }) : (p.source?.loc ? el('span', { class: 'chip-src', text: p.source.loc.split(/[\\/]/).pop() }) : null),
       p.kind === 'element' && p.source?.loc && /\.[a-z]+(:\d+)?(:\d+)?$/i.test(p.source.loc) ? el('button', { class: 'mini', text: '소스 열기', 'data-tip': p.source.loc, onclick: (e) => { e.stopPropagation(); openSource(b, p); } }) : null,
       p.kind === 'element' && p.text ? el('span', { class: 'chip-text', text: `"${p.text.slice(0, 40)}${p.text.length > 40 ? '…' : ''}"` }) : p.kind === 'console' ? el('span', { class: 'chip-text', text: p.items[p.items.length - 1].message }) : null,
       el('span', { class: 'x', text: '×', onclick: () => { b.picks.splice(i, 1); renderChips(b); } }))));
