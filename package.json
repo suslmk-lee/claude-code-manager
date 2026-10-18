@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/",
+    "test": "node --test",
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --mac dir",
     "dist": "electron-builder --mac dmg",

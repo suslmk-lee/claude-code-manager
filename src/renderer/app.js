@@ -306,12 +306,14 @@ function createTerm(s) {
 // Sessions with no TUI to attach to (an SDK chat in this app, or an interactive session in another terminal)
 // get a read-only live log in the terminal instead: recent turns, then the transcript tail as it grows.
 const ansiWrap = (s) => String(s || '').replace(/\r?\n/g, '\r\n');
-function turnToAnsi(t) {
-  if (t.role === 'user') return `\r\n\x1b[1;33m❯\x1b[0m ${ansiWrap(t.text)}${t.images ? ` \x1b[90m[이미지 ${t.images}장]\x1b[0m` : ''}\r\n`;
-  if (t.role === 'assistant') return `\r\n\x1b[1;32m●\x1b[0m ${ansiWrap(t.text)}\r\n`;
-  if (t.role === 'tool') return `\x1b[90m  ⚙ ${t.name}: ${ansiWrap(String(t.text).slice(0, 300))}\x1b[0m\r\n`;
+function turnToAnsi(t, cols = 80) {
+  // user/assistant: Markdown -> ANSI with the TUI's 2-col hanging indent; one-line tool/meta rows are cut to width with …
+  if (t.role === 'user') return `\r\n${mdToAnsi(t.text, { cols, first: '\x1b[1;33m❯\x1b[0m ' })}${t.images ? ` \x1b[90m[이미지 ${t.images}장]\x1b[0m` : ''}\r\n`;
+  if (t.role === 'assistant') return `\r\n${mdToAnsi(t.text, { cols, first: '\x1b[1;32m●\x1b[0m ' })}\r\n`;
+  const one = (s, pre) => truncW(pre + String(s ?? '').replace(/\s+/g, ' '), cols - 1);
+  if (t.role === 'tool') return `\x1b[90m${one(t.text, `  ⚙ ${t.name}: `)}\x1b[0m\r\n`;
   if (t.role === 'result') return `\x1b[90m  ↳ ${t.isError ? '\x1b[31m오류 \x1b[90m' : ''}결과 ${(t.text || '').length}자\x1b[0m\r\n`;
-  if (t.role === 'meta') return t.kind === 'duration' ? `\x1b[32m✱\x1b[0m \x1b[90m완료 · ${((t.ms || 0) / 1000).toFixed(1)}s\x1b[0m\r\n` : `\x1b[90m※ recap: ${ansiWrap(t.text)}\x1b[0m\r\n`;
+  if (t.role === 'meta') return t.kind === 'duration' ? `\x1b[32m✱\x1b[0m \x1b[90m완료 · ${((t.ms || 0) / 1000).toFixed(1)}s\x1b[0m\r\n` : `\x1b[90m${one(t.text, '※ recap: ')}\x1b[0m\r\n`;
   return '';
 }
 async function startLogMode(s, t) {
@@ -319,7 +321,7 @@ async function startLogMode(s, t) {
   t.status.textContent = (typeof CH !== 'undefined' && CH.has(s.sessionId)) ? '실시간 로그 · 이 앱의 챗 세션입니다 (입력은 대화 탭에서, 터미널이 필요하면 "터미널로 넘기기")' : '실시간 로그 · 다른 터미널에서 열린 세션이라 입력은 그쪽에서';
   t.term.reset();
   const r = await api.transcript(s.sessionId, { limit: 40 }).catch(() => null);
-  if (r) { if (r.from > 0) t.term.write(`\x1b[90m… 이전 ${fmtN(r.from)}턴은 대화 탭에서\x1b[0m\r\n`); for (const x of r.turns) t.term.write(turnToAnsi(x)); }
+  if (r) { if (r.from > 0) t.term.write(`\x1b[90m… 이전 ${fmtN(r.from)}턴은 대화 탭에서\x1b[0m\r\n`); for (const x of r.turns) t.term.write(turnToAnsi(x, t.term.cols)); }
   api.watchTranscript(s.sessionId);
 }
 function showTerminal(s, pane) {

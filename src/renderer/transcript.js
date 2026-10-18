@@ -84,7 +84,7 @@ async function showTranscript(s, pane) {
 }
 api.onTranscriptAppend(({ sessionId, turns }) => {
   const lt = S.terms.get(sessionId);
-  if (lt?.logMode) for (const t of turns) lt.term.write(turnToAnsi(t)); // terminal tab in live-log mode
+  if (lt?.logMode) for (const t of turns) lt.term.write(turnToAnsi(t, lt.term.cols)); // terminal tab in live-log mode
   const st = TR.get(sessionId);
   if (!st || S.sel !== sessionId || S.tab !== 'transcript') return;
   if (typeof CH !== 'undefined' && CH.has(sessionId)) return; // app-owned chat renders its own turns live
