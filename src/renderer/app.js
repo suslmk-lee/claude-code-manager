@@ -7,7 +7,7 @@ const el = (tag, attrs = {}, ...kids) => {
     if (k === 'class') e.className = v;
     else if (k === 'text') e.textContent = v;
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else e.setAttribute(k, v);
+    else if (v != null) e.setAttribute(k, v); // null = attribute absent (setAttribute would write "null", e.g. disabled="null")
   }
   for (const k of kids.flat()) if (k != null) e.append(k);
   return e;
@@ -101,7 +101,7 @@ function notifyNeedsInput(s) {
 const outdated = () => S.sessions.filter((s) => s.live && s.kind === 'background' && s.version && S.cliVersion && s.version !== S.cliVersion);
 function renderVersionBar() {
   const bar = $('#version-bar'), old = outdated(), bg = S.sessions.filter((s) => s.live && s.kind === 'background');
-  bar.replaceChildren(
+  bar.replaceChildren(...[ // native replaceChildren would print a null as "null"
     el('span', { class: 'msg', text: `Claude Code v${S.cliVersion || '?'} · 실행 중인 bg 세션 ${bg.length}개` }),
     old.length ? el('span', { class: 'pill', text: `구버전 ${old.length}개` }) : null,
     el('button', { class: old.length ? 'primary' : '', text: '모두 재시작 (respawn --all)', disabled: bg.length ? null : 'true', onclick: async () => {
@@ -110,7 +110,7 @@ function renderVersionBar() {
       const r = await api.respawnAll();
       if (!r.ok) alert(r.output || 'respawn 실패');
       setTimeout(loadSessions, 1500);
-    } }));
+    } })].filter(Boolean));
 }
 
 // open tabs, their order and the selected one persist across restarts
