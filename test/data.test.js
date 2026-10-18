@@ -265,8 +265,46 @@ test('env() drops a parent Claude Code session\'s markers but keeps everything e
   const saved = { ...process.env };
   Object.assign(process.env, { CLAUDE_CODE_CHILD_SESSION: '1', CLAUDE_CODE_SESSION_ID: 'x', CLAUDE_CODE_MESSAGING_TOKEN: 't', CLAUDECODE: '1', CLAUDE_PID: '1', CLAUDE_EFFORT: 'high', CLAUDE_CONFIG_DIR: '/keep', MY_VAR: 'keep' });
   const e = data.env();
+  const pathKey = Object.keys(e).find((k) => k.toUpperCase() === 'PATH');
   for (const k of ['CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT']) assert.equal(k in e, false, k);
-  assert.equal(e.CLAUDE_CONFIG_DIR, '/keep'); assert.equal(e.MY_VAR, 'keep'); assert.match(e.PATH, /\.local\/bin/);
+  assert.equal(e.CLAUDE_CONFIG_DIR, '/keep'); assert.equal(e.MY_VAR, 'keep'); assert.ok(e[pathKey].split(path.delimiter).includes(path.join(os.homedir(), '.local', 'bin')));
+  assert.deepEqual(Object.keys(e).filter((k) => k.toUpperCase() === 'PATH'), [pathKey]); // exactly one PATH-like key
   for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
   Object.assign(process.env, saved);
+});
+
+test('parseFrontmatter and copyMemory handle CRLF files', async () => {
+  const crlf = '---\r\nname: win\r\ndescription: crlf hook\r\nmetadata:\r\n  type: project\r\n---\r\n\r\nbody\r\n';
+  const { meta, body } = data.parseFrontmatter(crlf);
+  assert.deepEqual(meta, { name: 'win', description: 'crlf hook', type: 'project' });
+  assert.equal(body, 'body\r\n');
+  const src = path.join(projA, 'memory', 'win.md');
+  fs.writeFileSync(src, crlf);
+  fs.writeFileSync(path.join(projB, 'memory', 'MEMORY.md'), '- [other](other.md) — x\r\n'); // CRLF index tolerated
+  const r = await data.copyMemory({ src, destProjectDir: '-tmp-b' });
+  const text = fs.readFileSync(r.dest, 'utf8');
+  assert.equal(text, '---\r\nname: win\r\ndescription: crlf hook\r\nmetadata:\r\n  copiedFrom: -tmp-a/memory/win.md\r\n  type: project\r\n---\r\n\r\nbody\r\n');
+  assert.equal(data.parseFrontmatter(text).meta.copiedFrom, '-tmp-a/memory/win.md');
+  assert.equal(fs.readFileSync(path.join(projB, 'memory', 'MEMORY.md'), 'utf8'), '- [other](other.md) — x\n- [win](win.md) — crlf hook\n');
+});
+
+test('findClaude honors CLAUDE_BIN', () => {
+  assert.equal(data.findClaude(), '/bin/false');
+  const saved = process.env.CLAUDE_BIN;
+  process.env.CLAUDE_BIN = 'custom-claude'; assert.equal(data.findClaude(), 'custom-claude');
+  delete process.env.CLAUDE_BIN; assert.equal(typeof data.findClaude(), 'string'); // resolved binary or bare 'claude'
+  process.env.CLAUDE_BIN = saved;
+});
+
+test('searchTranscripts: Node fallback (no grep) agrees with the grep path', async () => {
+  const sid4 = '44444444-aaaa-bbbb-cccc-000000000000';
+  fs.writeFileSync(path.join(projA, `${sid4}.jsonl`),
+    line({ type: 'user', timestamp: '2026-10-09T01:00:00.000Z', message: { role: 'user', content: 'a ZebraQuux appears' } }) +
+    line({ type: 'assistant', timestamp: '2026-10-09T01:00:01.000Z', message: { model: 'm', content: [{ type: 'text', text: 'nothing' }] } }));
+  const key = (h) => h.map((x) => [x.sessionId, x.i, x.role]);
+  const viaNode = await data.searchTranscripts('zebraquux', { grep: false });
+  assert.deepEqual(key(viaNode), [[sid4, 0, 'user']]);
+  assert.match(viaNode[0].snippet, /ZebraQuux/);
+  assert.deepEqual(await data.searchTranscripts('no-such-needle-xyz', { grep: false }), []);
+  assert.deepEqual(key(await data.searchTranscripts('zebraquux')), key(viaNode)); // platform default (grep, or Node on Windows)
 });
