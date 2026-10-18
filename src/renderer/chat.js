@@ -48,7 +48,7 @@ function attachImages(ta, box) {
 function renderChatUI(s, pane, list) {
   if (!chatCapable(s)) {
     if (s.live && s.kind === 'background') renderTerminalComposer(s, pane);
-    else if (s.live) pane.append(el('div', { class: 'composer hint-bar', text: '다른 터미널에서 열린 세션입니다. 여기서는 실시간으로 읽기만 됩니다.' }));
+    else if (s.live) pane.append(el('div', { class: 'composer hint-bar', text: '다른 터미널에서 열린 세션이라 여기서는 읽기만 됩니다. 그 터미널에서 /background (또는 ←) 하면 여기서 입력할 수 있습니다.' }));
     return;
   }
   const st = chatState(s);

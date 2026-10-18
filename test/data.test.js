@@ -308,3 +308,11 @@ test('searchTranscripts: Node fallback (no grep) agrees with the grep path', asy
   assert.deepEqual(await data.searchTranscripts('no-such-needle-xyz', { grep: false }), []);
   assert.deepEqual(key(await data.searchTranscripts('zebraquux')), key(viaNode)); // platform default (grep, or Node on Windows)
 });
+
+test('readTailTitle follows a /background hand-off (continued-in) until the old session talks again', async () => {
+  const f = path.join(tmp, 'continued.jsonl'), next = 'f61e518f-df9e-4033-96d5-d4bfb97b0608';
+  fs.writeFileSync(f, line({ type: 'user', timestamp: '2026-10-18T00:00:00.000Z', message: { content: 'hi' } }) + line({ type: 'continued-in', continuedInSessionId: next }) + line({ type: 'cost-state' }));
+  assert.equal((await data.readTailTitle(f)).continuedIn, next);
+  fs.appendFileSync(f, line({ type: 'user', timestamp: '2026-10-18T00:01:00.000Z', message: { content: 'resumed here' } }));
+  assert.equal((await data.readTailTitle(f)).continuedIn, undefined);
+});

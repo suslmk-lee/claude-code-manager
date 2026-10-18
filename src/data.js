@@ -109,11 +109,12 @@ async function readTailTitle(file, bytes = 65536) {
     await fh.read(buf, 0, buf.length, start);
     const out = {};
     for (const line of buf.toString('utf8').split(/\r?\n/)) {
-      if (!/"type":"(custom-title|ai-title|permission-mode|pr-link|assistant|user)"/.test(line)) continue;
+      if (!/"type":"(custom-title|ai-title|permission-mode|pr-link|assistant|user|continued-in)"/.test(line)) continue;
       try {
         const d = JSON.parse(line);
-        if ((d.type === 'assistant' || d.type === 'user') && d.timestamp && !d.isSidechain) out.lastTs = Date.parse(d.timestamp); // last conversation record (not file mtime, which attach/detach bumps)
-        if (d.type === 'custom-title') out.customTitle = d.customTitle;
+        if ((d.type === 'assistant' || d.type === 'user') && d.timestamp && !d.isSidechain) { out.lastTs = Date.parse(d.timestamp); delete out.continuedIn; } // last conversation record (not file mtime, which attach/detach bumps); talking here again voids a hand-off
+        if (d.type === 'continued-in') out.continuedIn = d.continuedInSessionId; // `/background` (or ←) went on under a new daemon session id
+        else if (d.type === 'custom-title') out.customTitle = d.customTitle;
         else if (d.type === 'ai-title') out.aiTitle = d.aiTitle;
         else if (d.type === 'permission-mode') out.permissionMode = d.permissionMode;
         else if (d.type === 'pr-link') out.pr = { number: d.prNumber, url: d.prUrl, repo: d.prRepository };
@@ -158,7 +159,8 @@ async function gitInfo(cwd) {
   if (!cwd || !path.isAbsolute(cwd)) return null;
   const c = gitCache.get(cwd);
   if (c && Date.now() - c.at < 15000) return c.info;
-  const run = (args) => new Promise((res) => execFile('git', ['-C', cwd, ...args], { env: env(), timeout: 4000, windowsHide: true }, (e, out) => res(e ? null : String(out))));
+  // --no-optional-locks: status never takes index.lock, so it can't collide with the user's own git in that repo
+  const run = (args) => new Promise((res) => execFile('git', ['--no-optional-locks', '-C', cwd, ...args], { env: env(), timeout: 4000, windowsHide: true }, (e, out) => res(e ? null : String(out))));
   const branch = (await run(['rev-parse', '--abbrev-ref', 'HEAD']))?.trim();
   const info = branch ? { branch, dirty: !!(await run(['status', '--porcelain', '--untracked-files=no']))?.trim() } : null;
   gitCache.set(cwd, { at: Date.now(), info });
@@ -220,7 +222,7 @@ async function listSessions() {
       byId.set(sessionId, {
         sessionId, short: shortId(sessionId), projectDir: dir, file, size: st.size, mtime: st.mtimeMs,
         customTitle: title.customTitle, aiTitle: title.aiTitle,
-        permissionMode: title.permissionMode || null, lastModel: title.lastModel || null, lastContext: title.lastContext || null, pr: title.pr || null, gitBranch: title.gitBranch || null, workCwd: title.cwd || null, lastTs: title.lastTs || null,
+        permissionMode: title.permissionMode || null, lastModel: title.lastModel || null, lastContext: title.lastContext || null, pr: title.pr || null, gitBranch: title.gitBranch || null, workCwd: title.cwd || null, lastTs: title.lastTs || null, continuedIn: title.continuedIn || null,
         pinned: pins.includes(shortId(sessionId)), job,
       });
     }));

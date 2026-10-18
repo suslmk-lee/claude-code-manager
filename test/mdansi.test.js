@@ -20,7 +20,7 @@ test('table with Korean cells has aligned box borders', () => {
   const md = '| 이름 | 설명 | 수 |\n|:--|:-:|--:|\n| **굵게** | `code` 값 | 1 |\n| abc | 한글 텍스트 🚀 | 1234 |';
   const out = lines(mdToAnsi(md, { cols: 80 })).map(strip);
   const tbl = out.filter(boxy);
-  assert.equal(tbl.length, 6); // top, header, rule, 2 rows, bottom
+  assert.equal(tbl.length, 7); // top, header, rule, row, rule, row, bottom (TUI rules every row)
   assert.ok(tbl[0].trimStart().startsWith('┌') && tbl.at(-1).trimStart().startsWith('└'));
   assert.equal(new Set(tbl.map(strWidth)).size, 1);
   const all = out.join('\n');

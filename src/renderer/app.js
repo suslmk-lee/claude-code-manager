@@ -66,15 +66,34 @@ async function loadSessions() {
     if (saved?.sel) S.sel = saved.sel;
   }
   trackNeedsInput();
-  S.local = S.local.filter((l) => !S.sessions.some((s) => s.sessionId === l.sessionId)); // a new chat's placeholder gives way to the real session
+  const selBefore = S.sel;
+  for (const s of S.sessions) if (s.continuedIn && !s.live && S.sessions.some((x) => x.sessionId === s.continuedIn)) followContinuation(s.sessionId, s.continuedIn);
+  S.local =S.local.filter((l) => !S.sessions.some((s) => s.sessionId === l.sessionId)); // a new chat's placeholder gives way to the real session
   S.tabs = S.tabs.filter((id) => S.sessions.some((s) => s.sessionId === id) || S.local.some((s) => s.sessionId === id));
   if (!S.tabs.includes(S.sel)) S.sel = S.tabs[0] || null;
   renderSessionList();
   renderTabs();
   const head = $('#detail-head'), s = cur();
   if (head && s) head.replaceWith(buildHead(s)); // live refresh touches the header only, so the terminal keeps focus
-  if (typeof refreshTerminalActivity === 'function') refreshTerminalActivity();
+  // the other terminal ran /background (or ←): the session is now daemon-owned, so swap the live log for the real TUI
+  // the shown terminal has no TUI yet but the session is now a live background one (e.g. a /background hand-off whose daemon
+  // worker came up after the tab switched): attach. Never auto-resume a stopped session, never undo the user's detach.
+  const st = s && S.terms.get(s.sessionId);
+  if (st && S.view === 'sessions' && S.tab === 'terminal' && !st.ptyId && !st.detached && !st.btn.disabled && attachArgs(s)?.[0] === 'attach') attach(s);
+  if (S.sel !== selBefore) renderDetail(); // the selected tab followed a hand-off: show (and attach) the new session
+  else if (typeof refreshTerminalActivity === 'function') refreshTerminalActivity();
   else renderDetail();
+}
+// `/background` (or ←) in another terminal ends that interactive session and continues it under a new daemon id
+// (transcript record `continued-in`). The tab follows in place; resuming the old id would fork the conversation.
+function followContinuation(oldId, newId) {
+  const i = S.tabs.indexOf(oldId);
+  if (i === -1) return;
+  const t = S.terms.get(oldId);
+  if (t) { if (t.ptyId) api.ptyKill(t.ptyId); t.term.dispose(); S.terms.delete(oldId); }
+  if (S.tabs.includes(newId)) S.tabs.splice(i, 1); else S.tabs[i] = newId;
+  if (S.sel === oldId) S.sel = newId;
+  saveTabs();
 }
 // ---------- needs-input: notify on the transition, badge until the tab is opened ----------
 const needsInput = (s) => !!(s.job?.needs || s.state === 'blocked');
@@ -300,10 +319,10 @@ function createTerm(s) {
   const box = el('div', { class: 'term-box' });
   term.open(box);
   const status = el('span', { text: '연결 안 됨' });
-  const btn = el('button', { onclick: () => (t.ptyId ? api.ptyKill(t.ptyId) : attach(s)) });
+  const btn = el('button', { onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
   const t = { term, fit, box, btn, status, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status) };
   // one button toggles: detach only ends the `claude attach` client, the background session keeps running
-  t.setLabel = () => { btn.textContent = t.ptyId ? (s.live ? '떼기 (detach)' : '닫기') : (s.live ? '붙기 (attach)' : '이어가기 (resume)'); };
+  t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; btn.textContent = t.ptyId ? (live ? '떼기 (detach)' : '닫기') : (live ? '붙기 (attach)' : '이어가기 (resume)'); }; // fresh state: s is the object from when the tab was built
   t.setLabel();
   term.attachCustomKeyEventHandler((e) => {
     if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[0-9]$/.test(e.code)) return false; // ⌥digit = tab switch, not terminal input
@@ -335,7 +354,7 @@ function turnToAnsi(t, cols = 80) {
 }
 async function startLogMode(s, t) {
   t.logMode = true; t.btn.style.display = 'none';
-  t.status.textContent = (typeof CH !== 'undefined' && CH.has(s.sessionId)) ? '실시간 로그 · 이 앱의 챗 세션입니다 (입력은 대화 탭에서, 터미널이 필요하면 "터미널로 넘기기")' : '실시간 로그 · 다른 터미널에서 열린 세션이라 입력은 그쪽에서';
+  t.status.textContent = (typeof CH !== 'undefined' && CH.has(s.sessionId)) ? '실시간 로그 · 이 앱의 챗 세션입니다 (입력은 대화 탭에서, 터미널이 필요하면 "터미널로 넘기기")' : '실시간 로그 · 다른 터미널에서 열린 세션 — 그 터미널에서 /background (또는 ←) 하면 여기로 넘어와 TUI로 이어집니다';
   t.term.reset();
   const r = await api.transcript(s.sessionId, { limit: 40 }).catch(() => null);
   if (r) { if (r.from > 0) t.term.write(`\x1b[90m… 이전 ${fmtN(r.from)}턴은 대화 탭에서\x1b[0m\r\n`); for (const x of r.turns) t.term.write(turnToAnsi(x, t.term.cols)); }

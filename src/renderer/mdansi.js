@@ -107,22 +107,22 @@ function table(t, width, base) {
   }
   const bar = (l, m, r) => paint(l + cw.map((w) => '─'.repeat(w + 2)).join(m) + r, base);
   const v = paint('│', base);
-  const row = (cells) => {
+  const row = (cells, hdr) => {
     const ls = cells.map((c, i) => wrap(c || [], cw[i]));
     const h = Math.max(...ls.map((x) => x.length));
     const out = [];
     for (let y = 0; y < h; y++) {
       out.push(v + ls.map((x, i) => {
-        const { text, w } = x[y] || { text: '', w: 0 }, pad = Math.max(0, cw[i] - w), al = t.align[i];
+        const { text, w } = x[y] || { text: '', w: 0 }, pad = Math.max(0, cw[i] - w), al = hdr ? 'center' : t.align[i]; // TUI centres header cells
         const l = al === 'right' ? pad : al === 'center' ? pad >> 1 : 0;
         return ' ' + ' '.repeat(l) + text + ' '.repeat(pad - l) + ' ' + v;
       }).join(''));
     }
     return out;
   };
-  const body = grid.slice(1).map(row), multi = body.some((r) => r.length > 1);
-  const lines = [bar('┌', '┬', '┐'), ...row(grid[0]), bar('├', '┼', '┤')];
-  body.forEach((r, i) => { lines.push(...r); if (multi && i < body.length - 1) lines.push(bar('├', '┼', '┤')); });
+  const body = grid.slice(1).map((r) => row(r));
+  const lines = [bar('┌', '┬', '┐'), ...row(grid[0], true), bar('├', '┼', '┤')];
+  body.forEach((r, i) => { lines.push(...r); if (i < body.length - 1) lines.push(bar('├', '┼', '┤')); }); // a rule between every row, like the TUI
   lines.push(bar('└', '┴', '┘'));
   return lines;
 }
