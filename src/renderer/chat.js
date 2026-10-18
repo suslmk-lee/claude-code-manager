@@ -3,7 +3,7 @@
 // 대화 탭의 챗 레이어: composer under the transcript, streaming assistant text, tool lines, permission / question cards.
 
 const CH = new Map(); // key (sessionId) → { key, s, busy, model, pending: Map<id, req>, stream: { text, el } | null, status, closed }
-const chatCapable = (s) => (s.chatNew || !s.local) && (CH.has(s.sessionId) || !s.live) && (s.cwd || '').startsWith('/');
+const chatCapable = (s) => (s.chatNew || !s.local) && (CH.has(s.sessionId) || !s.live) && isAbs(s.cwd);
 
 function chatState(s) {
   let st = CH.get(s.sessionId);
@@ -368,7 +368,7 @@ function chatOnTabClose(sessionId) { const st = CH.get(sessionId); if (st) { api
 // 새 세션 창 → 챗: a placeholder tab; the first message creates the session (title = name) and init swaps in the real id.
 function newChatTab({ cwd, name, prompt, opts = {} }) {
   const tmp = 'chat-' + Date.now();
-  const s = { sessionId: tmp, chatNew: true, local: true, kind: 'chat', name: name || `${cwd.split('/').pop()} (챗)`, cwd, projectDir: cwd.replace(/[^A-Za-z0-9]/g, '-'),
+  const s = { sessionId: tmp, chatNew: true, local: true, kind: 'chat', name: name || `${baseName(cwd)} (챗)`, cwd, projectDir: cwd.replace(/[^A-Za-z0-9]/g, '-'),
     startOpts: { model: opts.model, effort: opts.effort, permissionMode: opts.permissionMode, agent: opts.agent, title: name || undefined } };
   S.local.push(s); S.tab = 'transcript';
   openSession(tmp);

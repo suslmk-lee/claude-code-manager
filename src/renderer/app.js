@@ -21,7 +21,15 @@ const fmtAgo = (ts) => {
   const d = Date.now() - ts, m = d / 6e4, h = m / 60, day = h / 24;
   return m < 1 ? '방금' : m < 60 ? `${Math.floor(m)}분 전` : h < 24 ? `${Math.floor(h)}시간 전` : `${Math.floor(day)}일 전`;
 };
-const shortPath = (p = '') => p.replace(/^\/Users\/[^/]+/, '~');
+const isMac = api.platform === 'darwin', isWinOS = api.platform === 'win32';
+const kbd = (s) => isMac ? s : s.replace(/⌘|⌃/g, 'Ctrl+').replace(/⌥/g, 'Alt+').replace(/⇧/g, 'Shift+'); // kbd('⌘S') → 'Ctrl+S' off mac
+const isAbs = (p = '') => /^([/\\]|[A-Za-z]:[\\/])/.test(p); // /…, C:\…, C:/…, \\server\…
+const baseName = (p = '') => p.split(/[\\/]/).filter(Boolean).pop() || p;
+const shortPath = (p = '') => {
+  const h = api.home || '';
+  if (h && p.length >= h.length && (isWinOS ? p.slice(0, h.length).toLowerCase() === h.toLowerCase() : p.startsWith(h)) && (p.length === h.length || /[\\/]/.test(p[h.length]))) return '~' + p.slice(h.length);
+  return p.replace(/^\/Users\/[^/]+|^\/home\/[^/]+|^[A-Za-z]:[\\/]Users[\\/][^\\/]+/i, '~');
+};
 
 const S = {
   view: 'sessions', sessions: [], local: [], sel: null, tab: 'terminal', tabs: [], booted: false, unseen: new Set(),
@@ -114,7 +122,7 @@ function renderTabs() {
   $('#tabs').replaceChildren(...S.tabs.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean).map((s) => {
     const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
     const n = S.tabs.indexOf(s.sessionId) + 1;
-    const t = el('div', { class: 'tab' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true', 'data-tip': `${n <= 9 ? `⌘${n} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
+    const t = el('div', { class: 'tab' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true', 'data-tip': `${n <= 9 ? `${kbd('⌘' + n)} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
       // drag to reorder: native HTML5 DnD; the half of the target the pointer is over decides before/after
       ondragstart: (e) => { S.dragTab = s.sessionId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.sessionId); setTimeout(() => t.classList.add('dragging')); },
       ondragover: (e) => { if (!S.dragTab || S.dragTab === s.sessionId) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const r = t.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2; t.classList.toggle('drop-after', after); t.classList.toggle('drop-before', !after); },
@@ -286,7 +294,7 @@ function attachArgs(s) {
   return ['--resume', s.sessionId];
 }
 function createTerm(s) {
-  const term = new Terminal({ fontFamily: '"D2Coding", "NanumGothicCoding", Menlo, ui-monospace, monospace', fontSize: 13, cursorBlink: true, scrollback: 5000, theme: { background: '#111317' } });
+  const term = new Terminal({ fontFamily: '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "Cascadia Mono", ui-monospace, monospace', fontSize: 13, cursorBlink: true, scrollback: 5000, theme: { background: '#111317' } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   const box = el('div', { class: 'term-box' });
@@ -297,7 +305,16 @@ function createTerm(s) {
   // one button toggles: detach only ends the `claude attach` client, the background session keeps running
   t.setLabel = () => { btn.textContent = t.ptyId ? (s.live ? '떼기 (detach)' : '닫기') : (s.live ? '붙기 (attach)' : '이어가기 (resume)'); };
   t.setLabel();
-  term.attachCustomKeyEventHandler((e) => !(e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[0-9]$/.test(e.code))); // ⌥digit = tab switch, not terminal input
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[0-9]$/.test(e.code)) return false; // ⌥digit = tab switch, not terminal input
+    if (!isMac && e.type === 'keydown' && e.ctrlKey && !e.altKey && !e.metaKey) { // Windows Terminal style clipboard
+      const k = e.key.toLowerCase();
+      if (k === 'c' && (e.shiftKey || term.hasSelection())) { e.preventDefault(); if (term.hasSelection()) navigator.clipboard.writeText(term.getSelection()).catch(() => {}); return false; } // plain Ctrl+C without selection = ^C
+      if (k === 'v' && e.shiftKey) { e.preventDefault(); navigator.clipboard.readText().then((t) => t && term.paste(t)).catch(() => {}); return false; }
+      if (k === 'v') return false; // not preventDefault: the browser paste event reaches xterm
+    }
+    return true;
+  });
   term.onData((d) => t.ptyId && api.ptyWrite(t.ptyId, d));
   term.onResize(({ cols, rows }) => t.ptyId && api.ptyResize(t.ptyId, cols, rows));
   new ResizeObserver(() => box.isConnected && box.clientHeight && fit.fit()).observe(box);
@@ -443,7 +460,7 @@ function editMemory(m, body) {
   ta.onkeydown = (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save(); } };
   sec.replaceChildren(
     el('div', { class: 'detail-head' }, el('h2', { text: `편집: ${m.name}` }), el('span', { class: 'path', text: shortPath(m.file) }),
-      el('span', { class: 'actions' }, msg, el('button', { text: '취소', onclick: () => selectMemory(m) }), el('button', { class: 'primary', text: '저장 (⌘S)', onclick: save }))),
+      el('span', { class: 'actions' }, msg, el('button', { text: '취소', onclick: () => selectMemory(m) }), el('button', { class: 'primary', text: `저장 (${kbd('⌘S')})`, onclick: save }))),
     el('div', { class: 'pane edit-pane' }, el('p', { class: 'hint', text: 'frontmatter(name · description)을 바꾸면 MEMORY.md 인덱스 줄도 같이 갱신됩니다.' }), ta));
   ta.focus();
 }
@@ -501,7 +518,7 @@ const dlg = $('#dlg-new');
 const OPTS = { model: '#new-model', effort: '#new-effort', permissionMode: '#new-permission', agent: '#new-agent', mode: '#new-mode' };
 function readOpts() { const o = {}; for (const [k, sel] of Object.entries(OPTS)) o[k] = $(sel).value.trim(); return o; }
 $('#btn-new').onclick = () => {
-  $('#new-cwd').value = cur()?.cwd?.startsWith('/') ? cur().cwd : '';
+  $('#new-cwd').value = isAbs(cur()?.cwd) ? cur().cwd : '';
   try { const last = JSON.parse(localStorage.getItem('newSessionOpts') || '{}'); for (const [k, sel] of Object.entries(OPTS)) $(sel).value = last[k] || ''; } catch { /* no saved options */ }
   dlg.showModal();
 };
@@ -523,7 +540,7 @@ dlg.onclose = async () => {
   if (!r.untrusted) return alert(r.output || '세션 생성 실패');
   // Untrusted folder: open claude interactively in our terminal so the trust prompt can be answered.
   const flags = Object.entries({ name, ...opts }).flatMap(([k, v]) => v ? [{ name: '--name', model: '--model', effort: '--effort', permissionMode: '--permission-mode', agent: '--agent' }[k], v] : []);
-  const local = { sessionId: 'local-' + Date.now(), local: true, name: name || cwd.split('/').pop(), cwd, args: [...flags, ...(prompt ? [prompt] : [])] };
+  const local = { sessionId: 'local-' + Date.now(), local: true, name: name || baseName(cwd), cwd, args: [...flags, ...(prompt ? [prompt] : [])] };
   S.local.push(local);
   S.tab = 'terminal';
   openSession(local.sessionId);
@@ -660,7 +677,7 @@ $('#btn-profile').onclick = () => { pmenu.classList.toggle('open'); if (pmenu.cl
 document.addEventListener('mousedown', (e) => { if (!pmenu.contains(e.target)) pmenu.classList.remove('open'); }, true);
 renderProfile();
 
-// ---------- keyboard shortcuts (menu accelerators via main, ⌥digit directly) ----------
+// ---------- keyboard shortcuts (menu accelerators via main, ⌥digit directly; Ctrl+Shift+N/K/W and Ctrl+Alt+1-4 off mac) ----------
 function selectTabN(n) { const id = n === 0 ? S.tabs[S.tabs.length - 1] : S.tabs[n - 1]; if (id) openSession(id); }
 function stepTab(d) { if (!S.tabs.length) return; const i = S.tabs.indexOf(S.sel); openSession(S.tabs[(i + d + S.tabs.length) % S.tabs.length]); }
 api.onShortcut(({ action, arg }) => {

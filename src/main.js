@@ -8,6 +8,10 @@ const chat = require('./chat');
 
 data.setCacheDir(path.join(app.getPath('userData'), 'cache'));
 
+const isMac = process.platform === 'darwin', isWin = process.platform === 'win32';
+const TITLE = 'Claude Code Manager';
+if (isWin) app.setAppUserModelId('local.claude-code-manager'); // = build.appId; HTML5 Notification needs it on Windows
+
 let win;
 const ptys = new Map(); // ptyId → node-pty process
 let nextPty = 1;
@@ -16,9 +20,11 @@ const send = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.s
 function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 900, minHeight: 600,
-    title: 'Claude Code Manager',
+    title: TITLE, autoHideMenuBar: !isMac, // Alt shows the menu; the app has its own header
+    ...(!isMac && !app.isPackaged ? { icon: path.join(__dirname, '..', 'build', 'icon.png') } : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true },
   });
+  if (!isMac) { win.on('page-title-updated', (e) => e.preventDefault()); win.on('focus', () => win.flashFrame(false)); } // keep the "(n)" badge title
   win.on('closed', () => { win = null; for (const p of ptys.values()) p.kill(); ptys.clear(); chat.closeAll(); });
   // links in rendered markdown open in the browser; the window itself never navigates away
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
@@ -58,7 +64,16 @@ ipcMain.handle('session:rename', (_e, req) => data.renameSession(req));
 ipcMain.handle('session:deleteTranscript', (_e, req) => data.deleteTranscript(req));
 ipcMain.handle('session:new', (_e, req) => data.newSession(req));
 ipcMain.handle('session:resumeBg', (_e, req) => data.resumeInBackground(req));
-ipcMain.on('app:badge', (_e, n) => app.dock?.setBadge(n ? String(n) : ''));
+let badgeN = 0;
+ipcMain.on('app:badge', (_e, n) => {
+  n = Number(n) || 0;
+  if (isMac) app.dock?.setBadge(n ? String(n) : '');
+  else { // no dock: count in the title, flash the taskbar when it grows
+    if (process.platform === 'linux') app.setBadgeCount(n);
+    if (win && !win.isDestroyed()) { win.setTitle(n ? `(${n}) ${TITLE}` : TITLE); if (n > badgeN && !win.isFocused()) win.flashFrame(true); else if (!n) win.flashFrame(false); }
+  }
+  badgeN = n;
+});
 ipcMain.on('win:focus', () => { if (win && !win.isDestroyed()) { win.show(); win.focus(); } });
 ipcMain.handle('dialog:pickDir', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
@@ -105,7 +120,10 @@ ipcMain.handle('source:open', (_e, { cwd, loc }) => new Promise((resolve) => {
   const file = path.isAbsolute(m[1]) ? m[1] : path.join(cwd || app.getPath('home'), m[1]);
   if (!fs.existsSync(file)) return resolve({ ok: false, error: `파일 없음: ${file}` });
   const { execFile } = require('child_process');
-  execFile('code', ['-g', m[2] ? `${file}:${m[2]}${m[3] ? ':' + m[3] : ''}` : file], { env: data.env() }, (err) => {
+  const target = m[2] ? `${file}:${m[2]}${m[3] ? ':' + m[3] : ''}` : file;
+  // Windows: `code` is code.cmd, which execFile can't run without a shell → quote the arg ourselves (paths may have spaces)
+  const [args, o] = isWin ? [['-g', `"${target}"`], { shell: true, windowsHide: true }] : [['-g', target], {}];
+  execFile('code', args, { env: data.env(), ...o }, (err) => {
     if (!err) return resolve({ ok: true, via: 'code', file });
     shell.openPath(file).then((msg) => resolve({ ok: !msg, via: 'open', file, error: msg || undefined }));
   });
@@ -117,7 +135,9 @@ const attachPtys = new Map(); // session short id → ptyId
 const ptyLast = new Map();    // ptyId → { at, sawPrompt }
 function openPty(args, cwd, cols, rows) {
   const id = nextPty++;
-  const p = pty.spawn(data.findClaude(), args, {
+  let exe = data.findClaude();
+  if (isWin && /\.(cmd|bat)$/i.test(exe)) { args = ['/c', exe, ...args]; exe = process.env.ComSpec || 'cmd.exe'; } // ConPTY can't launch scripts directly
+  const p = pty.spawn(exe, args, {
     name: 'xterm-256color', cols: cols || 120, rows: rows || 40,
     cwd: cwd && fs.existsSync(cwd) ? cwd : app.getPath('home'),
     env: { ...data.env(), TERM: 'xterm-256color', COLORTERM: 'truecolor', LANG: process.env.LANG || 'en_US.UTF-8' },
@@ -191,37 +211,45 @@ function watch(dir, opts, event, filter) {
   let t;
   try {
     fs.watch(dir, opts, (_ev, name) => {
-      if (filter && !filter(name || '')) return;
+      if (filter && !filter((name || '').replace(/\\/g, '/'))) return; // Windows reports backslashes
       clearTimeout(t);
       t = setTimeout(() => send(event), 500);
     });
   } catch (e) { console.warn('watch failed', dir, e.message); }
 }
 
+// Accelerators per platform. Off mac, menu accelerators fire before the page, so Ctrl+N/K/W (and the stock Edit
+// menu's Ctrl+C/V/…) would steal keys from the xterm terminal (^C interrupt, ^W/^K line editing): use Ctrl+Shift+… there.
+const ACC = isMac
+  ? { new: 'CmdOrCtrl+N', search: 'CmdOrCtrl+K', close: 'CmdOrCtrl+W', sub: (n) => `CmdOrCtrl+Shift+${n}` }
+  : { new: 'Ctrl+Shift+N', search: 'Ctrl+Shift+K', close: 'Ctrl+Shift+W', sub: (n) => `Ctrl+Alt+${n}` };
+// non-mac Edit menu: roles stay (items work) but registerAccelerator:false leaves the keys to Chromium / xterm
+const editMenu = isMac ? { role: 'editMenu' } : { label: '편집', submenu: ['undo', 'redo', 'separator', 'cut', 'copy', 'paste', 'selectAll'].map((r) => r === 'separator' ? { type: 'separator' } : { role: r, registerAccelerator: false }) };
+
 // App menu: keeps Edit (clipboard shortcuts) and adds tab shortcuts as accelerators, so they work even
 // while the embedded terminal has focus. The default menu's ⌘W (close window) is replaced by "탭 닫기".
 function buildMenu() {
   const key = (action, arg) => () => send('shortcut', { action, arg });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' },
-    { role: 'editMenu' },
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    editMenu,
     { label: '탭', submenu: [
-      { label: '새 세션…', accelerator: 'CmdOrCtrl+N', click: key('new') },
-      { label: '세션 목록 · 대화 검색', accelerator: 'CmdOrCtrl+K', click: key('search') },
+      { label: '새 세션…', accelerator: ACC.new, click: key('new') },
+      { label: '세션 목록 · 대화 검색', accelerator: ACC.search, click: key('search') },
       { type: 'separator' },
       ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ label: `${n}번째 탭`, accelerator: `CmdOrCtrl+${n}`, click: key('tab', n) })),
       { label: '마지막 탭', accelerator: 'CmdOrCtrl+0', click: key('tab', 0) },
       { label: '다음 탭', accelerator: 'Ctrl+Tab', click: key('next') },
       { label: '이전 탭', accelerator: 'Ctrl+Shift+Tab', click: key('prev') },
-      { label: '탭 닫기 (세션은 유지)', accelerator: 'CmdOrCtrl+W', click: key('close') },
+      { label: '탭 닫기 (세션은 유지)', accelerator: ACC.close, click: key('close') },
       { type: 'separator' },
-      { label: '터미널', accelerator: 'CmdOrCtrl+Shift+1', click: key('sub', 'terminal') },
-      { label: '대화', accelerator: 'CmdOrCtrl+Shift+2', click: key('sub', 'transcript') },
-      { label: '통계', accelerator: 'CmdOrCtrl+Shift+3', click: key('sub', 'stats') },
-      { label: '메모리', accelerator: 'CmdOrCtrl+Shift+4', click: key('sub', 'memory') },
+      { label: '터미널', accelerator: ACC.sub(1), click: key('sub', 'terminal') },
+      { label: '대화', accelerator: ACC.sub(2), click: key('sub', 'transcript') },
+      { label: '통계', accelerator: ACC.sub(3), click: key('sub', 'stats') },
+      { label: '메모리', accelerator: ACC.sub(4), click: key('sub', 'memory') },
     ] },
-    { label: '보기', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
-    { label: '윈도우', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }] },
+    { label: '보기', submenu: [{ role: 'reload', ...(isMac ? {} : { registerAccelerator: false }) /* Ctrl+R = shell history search */ }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
+    { label: '윈도우', submenu: [{ role: 'minimize' }, ...(isMac ? [{ role: 'zoom' }, { type: 'separator' }, { role: 'front' }] : [])] },
   ]));
 }
 
