@@ -5,19 +5,29 @@ No database of its own: sessions, status, transcripts, jobs and memory are read 
 Claude Code's files, and lifecycle actions are delegated to the `claude` CLI.
 
 ```
-npm install     # also rebuilds node-pty for Electron
+npm install     # macOS: rebuilds node-pty for Electron; Windows: uses node-pty's N-API prebuilds (no compiler needed)
 npm start       # run from source
-npm test        # node:test, no Electron needed
-npm run pack    # dist/mac-arm64/Claude Code Manager.app  (unsigned, runs from Dock)
-npm run dist    # dist/Claude Code Manager-<version>-arm64.dmg
-npm run install-app   # pack + quit the running copy + replace /Applications bundle + relaunch (--no-launch to skip)
+npm test        # node:test (`node --test`, auto-discovers test/*.test.js), no Electron needed
+npm run pack    # macOS: dist/mac-arm64/Claude Code Manager.app  (unsigned, runs from Dock)
+                # Windows: dist/win-unpacked/Claude Code Manager.exe  (unsigned)
+npm run dist    # macOS: dist/Claude Code Manager-<version>-arm64.dmg
+                # Windows: dist/Claude Code Manager Setup <version>.exe  (NSIS, per-user, pick the folder)
+npm run install-app   # sync-sdk + pack + quit the running copy + replace the installed app + relaunch
+                      #   (--no-launch to skip launching, --dry-run to print the steps only)
+npm run sync-sdk      # pin the Agent SDK to the installed Claude Code's patch number
+npm run pack:mac / dist:mac / pack:win / dist:win   # explicit per-platform targets
 ```
 
-Install: drag the .app from the DMG (or `cp -R "dist/mac-arm64/Claude Code Manager.app" /Applications/`).
+Install (macOS): drag the .app from the DMG (or `cp -R "dist/mac-arm64/Claude Code Manager.app" /Applications/`).
+`install-app` puts it in `/Applications`.
+Install (Windows): run the NSIS setup, or `npm run install-app`, which copies `dist/win-unpacked` to
+`%LOCALAPPDATA%\Programs\Claude Code Manager` (a running copy is closed first, `taskkill /F` after 5s) and
+creates a Start Menu shortcut. No code signing, so SmartScreen may warn on a setup downloaded elsewhere.
+Windows pack/dist pass `-c.npmRebuild=false`: node-pty ships prebuilt binaries, so no Python / VS Build Tools.
 The bundle is unsigned (`identity: null`); a build made on this machine carries no quarantine flag and opens
 normally. node-pty's native binaries are unpacked from asar so the embedded terminal works when packaged.
 The app icon is drawn in `build/icon.html` (SVG); `npm run icon` renders it to `build/icon.png`, which
-electron-builder converts to `icon.icns` at pack time. Dev runs (`npm start`) set the Dock icon from the PNG.
+electron-builder converts to `icon.icns` (macOS) / `icon.ico` (Windows) at pack time. Dev runs (`npm start`) set the Dock icon from the PNG.
 The Agent SDK's optional platform packages (`@anthropic-ai/claude-agent-sdk-<platform>`, a bundled Claude
 binary of ~230MB) are excluded from the bundle: the app always runs the Claude Code you installed.
 
@@ -62,6 +72,8 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
 - **Shortcuts** (app menu "탭", so they work while the terminal has focus): ⌘1–9 / ⌘0 switch tabs (⌥digit
   too, fleet-style), ⌃Tab / ⌃⇧Tab next/previous, ⌘W closes the tab (never the window), ⌘N new session,
   ⌘K opens the session list with the search box focused, ⌘⇧1–4 switch 터미널 / 대화 / 통계 / 메모리.
+  Windows variant: Ctrl+Shift+N / K / W new session / search / close tab, Ctrl+1–9 tabs, Ctrl+Alt+1–4 sub-views,
+  Ctrl+Shift+C / V copy / paste in the terminal.
 - **Needs-input alerts** — when a background session flips to blocked/`needs`, a macOS notification fires
   (click → that tab), the tab gets an 입력 badge until opened, and the Dock icon plus the 세션 ▾ button show
   how many sessions are waiting. Sessions already waiting at launch are counted but not re-notified.
@@ -143,7 +155,7 @@ background session the 대화 tab offers "중지하고 여기서 이어가기" (
 
 `src/chat.js` drives a session through `@anthropic-ai/claude-agent-sdk` (pinned exactly; its patch number
 tracks the CLI's — `0.3.N` ↔ `2.1.N`; `npm run sync-sdk` pins it to the installed CLI when that version is
-published, and `install-app` runs it first; the chat shows a warning banner while they drift): one
+published, and `install-app` runs it first (`scripts/sync-sdk.js`, plain Node, also on Windows); the chat shows a warning banner while they drift): one
 long-lived `query()` per session fed by a message queue, running the installed `claude` binary with the
 terminal's PATH so hooks, plugins, settings and transcripts are identical. Every SDK message is relayed to
 the renderer as `chat:event`; tool permissions and Claude's questions (`AskUserQuestion`) arrive as
