@@ -63,6 +63,8 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   prompt). Toggle with ⌃` (menu 탭 → 셸 패널), or the 셸 button at the right of the sub-tab row; it sits under
   whichever sub-tab is open, drag its top edge to resize (height remembered), and hiding keeps the shell running.
   One shell per session tab; `exit` or 닫기 ends it, 다시 열기 starts a fresh one. Open/closed state is remembered.
+  A session working inside `<project>/.claude/worktrees/<name>` gets its shell at `<project>`; the 워크트리로 cd
+  button in the bar jumps into the worktree and back.
 - **Terminal tab and Claude Code's fullscreen renderer** — Claude Code (2.1.30x) always draws attached background
   sessions with its fullscreen renderer (alternate screen, in-app scrolling; the `tui` setting and
   `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN` do not apply to them). Wheel scrolling therefore scrolls the TUI, and after a

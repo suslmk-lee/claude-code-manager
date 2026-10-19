@@ -407,13 +407,21 @@ async function attach(s) {
   t.term.focus();
 }
 // ---------- plain shell in the session's working folder (its own pty; nothing goes into the conversation) ----------
-const shellCwd = (s) => s.workCwd || s.cwd;
+// A session checked out under <project>/.claude/worktrees/<name> still gets its shell at <project> (user preference);
+// the bar offers a one-click cd into the worktree and back.
+const WORKTREE_RE = /^(.*)\/\.claude\/worktrees\/[^/]+(?:\/|$)/;
+const sessionDir = (s) => s.workCwd || s.cwd;
+const shellCwd = (s) => { const m = WORKTREE_RE.exec(sessionDir(s) || ''); return m ? m[1] : sessionDir(s); };
+const shq = (p) => `'${String(p).replace(/'/g, `'\\''`)}'`;
 function createShell(s) {
   const { term, fit, box } = newXterm();
   const status = el('span');
   const btn = el('button', { onclick: () => (h.ptyId ? api.ptyKill(h.ptyId) : openShell(s)) });
   const hide = el('button', { text: '숨기기', 'data-tip': '패널 숨기기 (⌃`) · 셸은 계속 실행', onclick: toggleShell });
-  const h = { term, fit, box, btn, status, ptyId: null, exited: false, bar: el('div', { class: 'term-bar' }, el('b', { class: 'shell-title', text: '셸' }), btn, status, lookButton(), hide) };
+  const wt = WORKTREE_RE.test(sessionDir(s) || '') ? sessionDir(s) : null;
+  const cdBtn = wt && el('button', { 'data-tip': `세션은 워크트리에서 작업 중: ${shortPath(wt)}`, onclick: () => { if (!h.ptyId) return; h.atWorktree = !h.atWorktree; api.ptyWrite(h.ptyId, `cd ${shq(h.atWorktree ? wt : shellCwd(s))}\r`); cdBtn.textContent = h.atWorktree ? '루트로 cd' : '워크트리로 cd'; h.term.focus(); } });
+  if (cdBtn) cdBtn.textContent = '워크트리로 cd';
+  const h = { term, fit, box, btn, status, ptyId: null, exited: false, atWorktree: false, bar: el('div', { class: 'term-bar' }, el('b', { class: 'shell-title', text: '셸' }), btn, cdBtn, status, lookButton(), hide) };
   h.setLabel = () => { btn.textContent = h.ptyId ? '닫기' : '다시 열기'; };
   h.setLabel();
   term.onData((d) => h.ptyId && api.ptyWrite(h.ptyId, d));
@@ -423,7 +431,7 @@ function createShell(s) {
 async function openShell(s) {
   const h = S.shells.get(s.sessionId);
   if (!h || h.ptyId) return;
-  if (h.exited) { h.exited = false; h.term.reset(); }
+  if (h.exited) { h.exited = false; h.term.reset(); h.atWorktree = false; const b = h.bar.querySelector('button:nth-child(3)'); if (b && /cd$/.test(b.textContent)) b.textContent = '워크트리로 cd'; }
   h.fit.fit();
   h.btn.disabled = true;
   h.ptyId = await api.ptyOpen({ shell: true, cwd: shellCwd(s), cols: h.term.cols, rows: h.term.rows });
