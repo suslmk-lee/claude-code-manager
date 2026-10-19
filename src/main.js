@@ -21,6 +21,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 900, minHeight: 600,
     title: TITLE, autoHideMenuBar: !isMac, // Alt shows the menu; the app has its own header
+    ...(isMac ? { transparent: true, backgroundColor: '#00000000' } : {}), // lets the terminal background be see-through (투명도 slider); the page paints its own opaque chrome
     ...(!isMac && !app.isPackaged ? { icon: path.join(__dirname, '..', 'build', 'icon.png') } : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true },
   });

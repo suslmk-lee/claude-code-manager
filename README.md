@@ -57,7 +57,9 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
 - **Terminal look (모양 button in the terminal bar)** — a theme gallery with preview swatches (Dracula, One Dark,
   Tokyo Night, Catppuccin, Nord, Gruvbox, Solarized, Flexoki, Kanagawa, Everforest, Night Owl, Rosé Pine, Cobalt2,
   Octocat, Hacker …) and a font picker: installed monospace families are detected (canvas width probe), any other
-  family can be typed, plus size. Applies live to every open terminal and shell; saved in localStorage.
+  family can be typed, plus size, and on macOS a 투명도 slider (30–100%) that makes the terminal and shell backgrounds
+  see-through (the window is created transparent; text and the rest of the UI stay opaque). Applies live to every
+  open terminal and shell; saved in localStorage.
 - **셸 panel (bottom, VS Code style)** — a plain terminal (your login shell) started in the session's working folder,
   for commands you want to run next to the session without them entering the conversation (unlike `!cmd` in the
   prompt). Toggle with ⌃` (menu 탭 → 셸 패널), or the 셸 button at the right of the sub-tab row; it sits under

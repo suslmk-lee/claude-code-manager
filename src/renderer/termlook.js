@@ -36,19 +36,23 @@ const DEFAULT_FONT_STACK = '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "C
 // monospace families worth offering when installed (checked below); anything else goes in the free-text field
 const FONT_CANDIDATES = ['D2Coding', 'D2CodingLigature', 'NanumGothicCoding', 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'Fira Code', 'FiraCode Nerd Font', 'Cascadia Code', 'Cascadia Mono', 'SF Mono', 'Menlo', 'Monaco', 'Source Code Pro', 'IBM Plex Mono', 'Hack', 'Hack Nerd Font', 'MesloLGS NF', 'Inconsolata', 'Ubuntu Mono', 'Roboto Mono', 'Victor Mono', 'Iosevka', 'Consolas', 'Courier New', 'Pretendard Mono', 'Sarasa Mono K'];
 
-const LOOK = (() => { try { return { theme: 'default', font: '', size: 13, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { theme: 'default', font: '', size: 13 }; } })();
+const LOOK = (() => { try { return { theme: 'default', font: '', size: 13, alpha: 1, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { theme: 'default', font: '', size: 13, alpha: 1 }; } })();
+// terminal background transparency (macOS: the window is created transparent, so the desktop shows through the terminal only)
+const alphaOn = () => isMac && LOOK.alpha < 1;
+const withAlpha = (hex, a) => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex); return m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${a})` : hex; };
 const saveLook = () => { try { localStorage.setItem('termLook', JSON.stringify(LOOK)); } catch { /* fine */ } };
 
 function xtermTheme(t) {
   const th = { background: t.bg, foreground: t.fg, cursor: t.cursor || t.fg, cursorAccent: t.bg, selectionBackground: t.sel || undefined };
   if (t.ansi) ANSI_KEYS.forEach((k, i) => { th[k] = t.ansi[i]; });
-  if (t.id === 'default') return { background: t.bg }; // xterm's own defaults for the rest
-  return th;
+  const out = t.id === 'default' ? { background: t.bg } : th; // xterm's own defaults for the rest
+  if (alphaOn()) out.background = withAlpha(t.bg, LOOK.alpha);
+  return out;
 }
 const currentTheme = () => TERM_THEMES.find((t) => t.id === LOOK.theme) || TERM_THEMES[0];
 const fontFamily = () => (LOOK.font ? `${/^[a-z-]+$/.test(LOOK.font) ? LOOK.font : `"${LOOK.font.replace(/"/g, '')}"`}, ${DEFAULT_FONT_STACK}` : DEFAULT_FONT_STACK); // generic keywords (ui-monospace) stay unquoted
 // what newXterm() passes to the Terminal constructor
-function xtermOptions() { return { theme: xtermTheme(currentTheme()), fontFamily: fontFamily(), fontSize: Number(LOOK.size) || 13 }; }
+function xtermOptions() { return { theme: xtermTheme(currentTheme()), fontFamily: fontFamily(), fontSize: Number(LOOK.size) || 13, allowTransparency: true }; }
 
 // canvas width trick: a family is installed when text measures differently from the generic fallback alone
 const hasFont = (() => {
@@ -65,6 +69,7 @@ const hasFont = (() => {
 function applyLook() {
   const o = xtermOptions();
   document.documentElement.style.setProperty('--term-bg', o.theme.background);
+  document.documentElement.classList.toggle('translucent', alphaOn()); // page chrome stays opaque, the terminal areas go see-through
   for (const t of [...(S.terms?.values() || []), ...(S.shells?.values() || [])]) {
     t.term.options.theme = o.theme; t.term.options.fontFamily = o.fontFamily; t.term.options.fontSize = o.fontSize;
     if (t.box.isConnected) t.fit.fit();
@@ -95,10 +100,13 @@ function openLook(anchor) {
   const custom = el('input', { class: 'look-custom', placeholder: '폰트 이름 (설치된 글꼴)', value: known ? '' : LOOK.font, hidden: known ? '' : null,
     onchange: () => { LOOK.font = custom.value.trim(); applyLook(); } });
   const size = el('input', { type: 'number', min: '9', max: '24', step: '1', value: String(LOOK.size), class: 'look-size', oninput: () => { const n = Number(size.value); if (n >= 9 && n <= 24) { LOOK.size = n; applyLook(); } } });
+  const pct = el('span', { class: 'look-unit', text: `${Math.round(LOOK.alpha * 100)}%` });
+  const alpha = el('input', { type: 'range', min: '30', max: '100', step: '5', value: String(Math.round(LOOK.alpha * 100)), class: 'look-alpha', oninput: () => { LOOK.alpha = Number(alpha.value) / 100; pct.textContent = `${alpha.value}%`; applyLook(); } });
   const pop = el('div', { id: 'term-look', class: 'look-pop' },
     el('div', { class: 'look-head' }, el('b', { text: '터미널 모양' }), el('button', { class: 'x', text: '×', onclick: closeLook })),
     el('div', { class: 'look-row' }, el('span', { class: 'look-label', text: 'Font' }), sel, size, el('span', { class: 'look-unit', text: 'px' })),
     custom,
+    isMac ? el('div', { class: 'look-row', 'data-tip': '터미널 배경만 투명해지고 글자는 그대로입니다 · 뒤 창이 비쳐 보임' }, el('span', { class: 'look-label', text: '투명도' }), alpha, pct) : null,
     el('div', { class: 'look-label look-themes-title', text: 'Themes' }),
     el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
       swatch(t), el('span', { class: 'theme-name', text: t.name })))));

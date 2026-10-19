@@ -123,6 +123,10 @@ body.resizing { cursor:ns-resize; user-select:none; }
 .look-row { display:flex; gap:6px; align-items:center; padding:4px 12px; }
 .look-row select { flex:1; min-width:0; }
 .look-size { width:58px; }
+.look-alpha { flex:1; min-width:0; accent-color:var(--acc); }
+/* see-through terminal (macOS, transparent window): only the terminal areas lose their backdrop, everything else paints var(--bg) */
+html.translucent, html.translucent body, html.translucent #view-sessions, html.translucent #session-detail:has(.pane.term, .shell-panel) { background:transparent; }
+html.translucent .tabs, html.translucent .head-wrap, html.translucent .pane:not(.term), html.translucent #view-memory, html.translucent #view-stats { background:var(--bg); }
 .look-unit { color:var(--dim); font-size:11px; }
 .look-label { color:var(--dim); }
 .look-custom { margin:4px 12px; width:calc(100% - 24px); }
