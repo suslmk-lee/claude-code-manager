@@ -46,7 +46,7 @@ function xtermTheme(t) {
   const th = { background: t.bg, foreground: t.fg, cursor: t.cursor || t.fg, cursorAccent: t.bg, selectionBackground: t.sel || undefined };
   if (t.ansi) ANSI_KEYS.forEach((k, i) => { th[k] = t.ansi[i]; });
   const out = t.id === 'default' ? { background: t.bg } : th; // xterm's own defaults for the rest
-  if (alphaOn()) out.background = withAlpha(t.bg, LOOK.alpha);
+  if (alphaOn()) out.background = 'rgba(0, 0, 0, 0)'; // the pane paints the one translucent layer (--term-bg); xterm must not add a second one
   return out;
 }
 const currentTheme = () => TERM_THEMES.find((t) => t.id === LOOK.theme) || TERM_THEMES[0];
@@ -68,7 +68,7 @@ const hasFont = (() => {
 
 function applyLook() {
   const o = xtermOptions();
-  document.documentElement.style.setProperty('--term-bg', o.theme.background);
+  document.documentElement.style.setProperty('--term-bg', alphaOn() ? withAlpha(currentTheme().bg, LOOK.alpha) : currentTheme().bg);
   document.documentElement.classList.toggle('translucent', alphaOn()); // page chrome stays opaque, the terminal areas go see-through
   for (const t of [...(S.terms?.values() || []), ...(S.shells?.values() || [])]) {
     t.term.options.theme = o.theme; t.term.options.fontFamily = o.fontFamily; t.term.options.fontSize = o.fontSize;
