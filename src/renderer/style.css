@@ -9,6 +9,9 @@
 html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:13px/1.45 -apple-system, "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", "Pretendard", system-ui, sans-serif; }
 body { display:flex; flex-direction:column; }
 header { display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid var(--line); background:var(--panel); min-height:44px; }
+/* macOS: the header is the title bar (hiddenInset): room for the traffic lights, draggable except for its controls */
+html.mac header { padding-left:86px; -webkit-app-region:drag; }
+html.mac header :is(button, input, select, .menu, #tabs, .tab-arrow) { -webkit-app-region:no-drag; }
 
 /* session menu: hover (or click) the button to unfold the fleet list over the page */
 .menu { position:relative; }

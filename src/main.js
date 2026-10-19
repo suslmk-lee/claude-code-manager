@@ -21,7 +21,9 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 900, minHeight: 600,
     title: TITLE, autoHideMenuBar: !isMac, // Alt shows the menu; the app has its own header
-    ...(isMac ? { transparent: true, backgroundColor: '#00000000' } : {}), // lets the terminal background be see-through (투명도 slider); the page paints its own opaque chrome
+    // macOS: transparent window so the terminal background can be see-through (투명도 slider). A transparent window has no
+    // native title bar, so the traffic lights sit over the app header, which becomes the drag region (CSS -webkit-app-region).
+    ...(isMac ? { transparent: true, backgroundColor: '#00000000', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 16 } } : {}),
     ...(!isMac && !app.isPackaged ? { icon: path.join(__dirname, '..', 'build', 'icon.png') } : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true },
   });

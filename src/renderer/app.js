@@ -22,6 +22,7 @@ const fmtAgo = (ts) => {
   return m < 1 ? '방금' : m < 60 ? `${Math.floor(m)}분 전` : h < 24 ? `${Math.floor(h)}시간 전` : `${Math.floor(day)}일 전`;
 };
 const isMac = api.platform === 'darwin', isWinOS = api.platform === 'win32';
+document.documentElement.classList.toggle('mac', isMac); // header doubles as the title bar on macOS (see style.css)
 const kbd = (s) => isMac ? s : s.replace(/⌘|⌃/g, 'Ctrl+').replace(/⌥/g, 'Alt+').replace(/⇧/g, 'Shift+'); // kbd('⌘S') → 'Ctrl+S' off mac
 const isAbs = (p = '') => /^([/\\]|[A-Za-z]:[\\/])/.test(p); // /…, C:\…, C:/…, \\server\…
 const baseName = (p = '') => p.split(/[\\/]/).filter(Boolean).pop() || p;
