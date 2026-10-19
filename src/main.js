@@ -133,10 +133,11 @@ ipcMain.handle('source:open', (_e, { cwd, loc }) => new Promise((resolve) => {
 // One `claude attach` client per background session, shared by the terminal tab and by chat-tab sends.
 const attachPtys = new Map(); // session short id → ptyId
 const ptyLast = new Map();    // ptyId → { at, sawPrompt }
-function openPty(args, cwd, cols, rows) {
+function openPty(args, cwd, cols, rows, shell = false) {
   const id = nextPty++;
   let exe = data.findClaude();
-  if (isWin && /\.(cmd|bat)$/i.test(exe)) { args = ['/c', exe, ...args]; exe = process.env.ComSpec || 'cmd.exe'; } // ConPTY can't launch scripts directly
+  if (shell) { [exe, args] = isWin ? [process.env.ComSpec || 'cmd.exe', []] : [process.env.SHELL || '/bin/zsh', ['-l']]; } // the user's own shell, login so PATH/aliases load
+  else if (isWin && /\.(cmd|bat)$/i.test(exe)) { args = ['/c', exe, ...args]; exe = process.env.ComSpec || 'cmd.exe'; } // ConPTY can't launch scripts directly
   const p = pty.spawn(exe, args, {
     name: 'xterm-256color', cols: cols || 120, rows: rows || 40,
     cwd: cwd && fs.existsSync(cwd) ? cwd : app.getPath('home'),
@@ -149,7 +150,8 @@ function openPty(args, cwd, cols, rows) {
   p.onExit(({ exitCode }) => { ptys.delete(id); ptyLast.delete(id); for (const [k, v] of attachPtys) if (v === id) attachPtys.delete(k); send('pty:exit', { id, code: exitCode }); });
   return id;
 }
-ipcMain.handle('pty:open', (_e, { args, cwd, cols, rows }) => {
+ipcMain.handle('pty:open', (_e, { args = [], cwd, cols, rows, shell }) => {
+  if (shell) return openPty([], cwd, cols, rows, true); // plain shell in the session's folder (the 셸 sub-tab)
   const existing = args[0] === 'attach' && attachPtys.get(args[1]);
   if (existing && ptys.has(existing)) { // the chat tab already attached: reuse, nudge the TUI to repaint at this size
     const p = ptys.get(existing);
@@ -247,6 +249,8 @@ function buildMenu() {
       { label: '대화', accelerator: ACC.sub(2), click: key('sub', 'transcript') },
       { label: '통계', accelerator: ACC.sub(3), click: key('sub', 'stats') },
       { label: '메모리', accelerator: ACC.sub(4), click: key('sub', 'memory') },
+      { type: 'separator' },
+      { label: '셸 패널 보이기/숨기기', accelerator: 'Ctrl+`', click: key('shell') },
     ] },
     { label: '보기', submenu: [{ role: 'reload', ...(isMac ? {} : { registerAccelerator: false }) /* Ctrl+R = shell history search */ }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
     { label: '윈도우', submenu: [{ role: 'minimize' }, ...(isMac ? [{ role: 'zoom' }, { type: 'separator' }, { role: 'front' }] : [])] },

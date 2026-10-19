@@ -21,6 +21,9 @@ function mdBody(text) { const d = el('div', { class: 'md-body' }); d.innerHTML =
 // 대화 서브탭: read-only transcript (paged from the end) and the flyout's full-text search.
 
 const TR = new Map(); // sessionId → { from, total, turns, filter }
+// tool calls (⚙ Bash/Write …) and their result rows in the 대화 tab: hidden by default, toggle in the bar, remembered
+const toolsShown = () => { try { return localStorage.getItem('showTools') === '1'; } catch { return false; } };
+const turnsClass = () => 'turns' + (toolsShown() ? '' : ' no-tools');
 const PAGE = 200;
 
 const localTime = (ts) => ts ? new Date(ts).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' }) : '';
@@ -40,7 +43,7 @@ function turnEl(t) {
 
 async function showTranscript(s, pane) {
   if (!s.file) {
-    const list = el('div', { class: 'turns' }, el('p', { class: 'msg', text: s.chatNew ? `새 챗 · ${shortPath(s.cwd)} · 첫 메시지를 보내면 이 폴더에서 세션이 만들어집니다` : '트랜스크립트 파일이 아직 없습니다' }));
+    const list = el('div', { class: turnsClass() }, el('p', { class: 'msg', text: s.chatNew ? `새 챗 · ${shortPath(s.cwd)} · 첫 메시지를 보내면 이 폴더에서 세션이 만들어집니다` : '트랜스크립트 파일이 아직 없습니다' }));
     pane.replaceChildren(list);
     if (typeof renderChatUI === 'function') renderChatUI(s, pane, list);
     return;
@@ -54,7 +57,7 @@ async function showTranscript(s, pane) {
     st = { from: r.from, total: r.total, turns: r.turns, filter: st?.filter || '' };
     TR.set(s.sessionId, st);
   }
-  const list = el('div', { class: 'turns' });
+  const list = el('div', { class: turnsClass() });
   const more = el('button', { onclick: async () => {
     const from = Math.max(0, st.from - PAGE);
     const r = await api.transcript(s.sessionId, { from, limit: st.from - from });
@@ -68,7 +71,11 @@ async function showTranscript(s, pane) {
   const moreLabel = () => st.from > 0 ? `이전 ${fmtN(Math.min(PAGE, st.from))}개 더 보기 (${fmtN(st.from)}개 남음)` : '처음부터 표시 중';
   more.textContent = moreLabel(); more.disabled = st.from === 0;
   const filter = el('input', { class: 'tr-filter', placeholder: '이 대화 안에서 찾기', value: st.filter, oninput: (e) => { st.filter = e.target.value; for (const c of list.children) applyFilter(c, st.filter); } });
+  const toolsCb = el('input', { type: 'checkbox' }); toolsCb.checked = toolsShown();
+  const setTools = (on, persist) => { toolsCb.checked = on; list.classList.toggle('no-tools', !on); if (persist) try { localStorage.setItem('showTools', on ? '1' : ''); } catch { /* fine */ } };
+  toolsCb.onchange = () => setTools(toolsCb.checked, true);
   const bar = el('div', { class: 'tr-bar' }, more, filter,
+    el('label', { class: 'tr-tools', 'data-tip': 'Bash·Write 등 도구 호출 줄과 도구 결과 줄 표시 (기본 숨김)' }, toolsCb, ' 도구 호출'),
     el('span', { class: 'msg', text: `${fmtN(st.total)} 턴 · 서브에이전트 제외` }),
     el('button', { text: '↻', 'data-tip': '다시 읽기', onclick: () => { TR.delete(s.sessionId); renderDetail(); } }),
     el('button', { text: '맨 아래', onclick: () => { pane.scrollTop = pane.scrollHeight; } }));
@@ -79,7 +86,7 @@ async function showTranscript(s, pane) {
   if (typeof renderChatUI === 'function') renderChatUI(s, pane, list);
   requestAnimationFrame(() => {
     const target = jump != null && document.getElementById('turn-' + jump);
-    if (target) { target.classList.add('hl'); target.scrollIntoView({ block: 'center' }); } else pane.scrollTop = pane.scrollHeight;
+    if (target) { if (target.matches('.tool, .result')) setTools(true, false); target.classList.add('hl'); target.scrollIntoView({ block: 'center' }); } else pane.scrollTop = pane.scrollHeight; // a search hit inside a tool row reveals tool rows for this view
   });
 }
 api.onTranscriptAppend(({ sessionId, turns }) => {

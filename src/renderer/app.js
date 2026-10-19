@@ -33,7 +33,7 @@ const shortPath = (p = '') => {
 
 const S = {
   view: 'sessions', sessions: [], local: [], sel: null, tab: 'terminal', tabs: [], booted: false, unseen: new Set(),
-  terms: new Map(), memory: null, projects: [], memSel: null, memFilter: '', memProject: '',
+  terms: new Map(), shells: new Map(), shellOpen: (() => { try { return localStorage.getItem('shellOpen') === '1'; } catch { return false; } })(), memory: null, projects: [], memSel: null, memFilter: '', memProject: '',
 };
 const cur = () => S.sessions.find((s) => s.sessionId === S.sel) || S.local.find((s) => s.sessionId === S.sel);
 
@@ -80,9 +80,9 @@ async function loadSessions() {
   // worker came up after the tab switched): attach. Never auto-resume a stopped session, never undo the user's detach.
   const st = s && S.terms.get(s.sessionId);
   if (st && S.view === 'sessions' && S.tab === 'terminal' && !st.ptyId && !st.detached && !st.btn.disabled && attachArgs(s)?.[0] === 'attach') attach(s);
-  if (S.sel !== selBefore) renderDetail(); // the selected tab followed a hand-off: show (and attach) the new session
+  // render when the selection changed (a hand-off) or nothing is shown for it yet (first load with a remembered selection)
+  if (S.sel !== selBefore || (s && !head)) renderDetail();
   else if (typeof refreshTerminalActivity === 'function') refreshTerminalActivity();
-  else renderDetail();
 }
 // `/background` (or ←) in another terminal ends that interactive session and continues it under a new daemon id
 // (transcript record `continued-in`). The tab follows in place; resuming the old id would fork the conversation.
@@ -91,6 +91,8 @@ function followContinuation(oldId, newId) {
   if (i === -1) return;
   const t = S.terms.get(oldId);
   if (t) { if (t.ptyId) api.ptyKill(t.ptyId); t.term.dispose(); S.terms.delete(oldId); }
+  const h = S.shells.get(oldId); // the shell is just a pty in that folder: it follows the tab to the new id
+  if (h) { S.shells.delete(oldId); if (S.shells.has(newId)) { if (h.ptyId) api.ptyKill(h.ptyId); h.term.dispose(); } else S.shells.set(newId, h); }
   if (S.tabs.includes(newId)) S.tabs.splice(i, 1); else S.tabs[i] = newId;
   if (S.sel === oldId) S.sel = newId;
   saveTabs();
@@ -192,6 +194,8 @@ function closeTab(id) {
   if (typeof chatOnTabClose === 'function') chatOnTabClose(id); // an SDK chat on this tab ends with it (transcript stays)
   const t = S.terms.get(id);
   if (t) { if (t.ptyId) api.ptyKill(t.ptyId); t.term.dispose(); S.terms.delete(id); } // detach only: the session itself keeps running
+  const h = S.shells.get(id);
+  if (h) { if (h.ptyId) api.ptyKill(h.ptyId); h.term.dispose(); S.shells.delete(id); }
   S.tabs = S.tabs.filter((x) => x !== id);
   S.local = S.local.filter((s) => s.sessionId !== id);
   if (S.sel === id) S.sel = S.tabs[S.tabs.length - 1] || null;
@@ -288,10 +292,13 @@ function renderDetail() {
   const sec = $('#session-detail');
   if (!s) { sec.replaceChildren(el('div', { class: 'empty', text: '「세션 ▾」에서 세션을 고르면 탭으로 열립니다' })); if (typeof syncBrowserPane === 'function') syncBrowserPane(null); return; }
   const head = buildHead(s);
+  if (S.tab === 'shell') S.tab = 'terminal'; // the shell is a bottom panel now, not a sub-tab
   const tabs = el('div', { class: 'tabs' }, ...[['terminal', '터미널'], ['transcript', '대화'], ['stats', '통계'], ['memory', '메모리']].map(([k, label]) =>
-    el('button', { class: k === S.tab ? 'active' : '', text: label, onclick: () => { S.tab = k; renderDetail(); } })));
+    el('button', { class: k === S.tab ? 'active' : '', text: label, onclick: () => { S.tab = k; renderDetail(); } })),
+    el('button', { class: 'shell-toggle' + (S.shellOpen ? ' active' : ''), text: S.shellOpen ? '셸 ▾' : '셸 ▴', 'data-tip': `하단 셸 패널 ${S.shellOpen ? '숨기기' : '열기'} (⌃\`) · 세션 폴더의 zsh, 대화에는 기록되지 않음`, onclick: toggleShell }));
   const pane = el('div', { class: 'pane' + (S.tab === 'terminal' ? ' term' : '') });
   sec.replaceChildren(el('div', { class: 'head-wrap' }, el('div', { class: 'head-strip' }, el('i')), head), tabs, pane); // head is an overlay: hidden until the strip is hovered, so the pane never reflows
+  renderShellPanel();
   if (typeof syncBrowserPane === 'function') syncBrowserPane(s);
   if (S.tab === 'terminal') showTerminal(s, pane);
   else if (S.tab === 'transcript') showTranscript(s, pane);
@@ -312,18 +319,13 @@ function attachArgs(s) {
   if (s.live) return null;
   return ['--resume', s.sessionId];
 }
-function createTerm(s) {
-  const term = new Terminal({ fontFamily: '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "Cascadia Mono", ui-monospace, monospace', fontSize: 13, cursorBlink: true, scrollback: 5000, theme: { background: '#111317' } });
+// xterm setup shared by the Claude terminal and the plain shell: font/theme, fit addon, key handling, auto-fit on resize
+function newXterm() {
+  const term = new Terminal({ cursorBlink: true, scrollback: 5000, ...xtermOptions() }); // theme + font from termlook.js (user-chosen, persisted)
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   const box = el('div', { class: 'term-box' });
   term.open(box);
-  const status = el('span', { text: '연결 안 됨' });
-  const btn = el('button', { onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
-  const t = { term, fit, box, btn, status, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status) };
-  // one button toggles: detach only ends the `claude attach` client, the background session keeps running
-  t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; btn.textContent = t.ptyId ? (live ? '떼기 (detach)' : '닫기') : (live ? '붙기 (attach)' : '이어가기 (resume)'); }; // fresh state: s is the object from when the tab was built
-  t.setLabel();
   term.attachCustomKeyEventHandler((e) => {
     if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[0-9]$/.test(e.code)) return false; // ⌥digit = tab switch, not terminal input
     if (!isMac && e.type === 'keydown' && e.ctrlKey && !e.altKey && !e.metaKey) { // Windows Terminal style clipboard
@@ -334,9 +336,28 @@ function createTerm(s) {
     }
     return true;
   });
-  term.onData((d) => t.ptyId && api.ptyWrite(t.ptyId, d));
-  term.onResize(({ cols, rows }) => t.ptyId && api.ptyResize(t.ptyId, cols, rows));
   new ResizeObserver(() => box.isConnected && box.clientHeight && fit.fit()).observe(box);
+  return { term, fit, box };
+}
+function createTerm(s) {
+  const { term, fit, box } = newXterm();
+  const status = el('span', { text: '연결 안 됨' });
+  const btn = el('button', { onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
+  const t = { term, fit, box, btn, status, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status, lookButton()) };
+  // one button toggles: detach only ends the `claude attach` client, the background session keeps running
+  t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; btn.textContent = t.ptyId ? (live ? '떼기 (detach)' : '닫기') : (live ? '붙기 (attach)' : '이어가기 (resume)'); }; // fresh state: s is the object from when the tab was built
+  t.setLabel();
+  // Claude Code draws attached background sessions with its fullscreen renderer (alt screen, own scrolling; not switchable):
+  // after a wheel-up, auto-follow pauses and typing no longer brings the prompt back into view. So the first keystroke after
+  // a wheel-up is preceded by its scroll:bottom key (Ctrl+End), which jumps to the latest message and re-enables auto-follow.
+  // Mouse (SGR `\e[<`, X10 `\e[M`) and focus (`\e[I`/`\e[O`) reports are not keystrokes.
+  term.onData((d) => {
+    if (!t.ptyId) return;
+    if (/^\x1b\[[<MIO]/.test(d)) { if (/^\x1b\[<64;/.test(d)) t.wheeledUp = true; } // SGR button 64 = wheel up
+    else if (t.wheeledUp) { t.wheeledUp = false; if (term.buffer.active.type === 'alternate') api.ptyWrite(t.ptyId, '\x1b[1;5F'); }
+    api.ptyWrite(t.ptyId, d);
+  });
+  term.onResize(({ cols, rows }) => t.ptyId && api.ptyResize(t.ptyId, cols, rows));
   return t;
 }
 // Sessions with no TUI to attach to (an SDK chat in this app, or an interactive session in another terminal)
@@ -385,12 +406,72 @@ async function attach(s) {
   t.status.textContent = 'claude ' + args.join(' ');
   t.term.focus();
 }
-function fitCurrent() { const t = S.terms.get(S.sel); if (t?.box.isConnected) requestAnimationFrame(() => t.fit.fit()); }
-api.onPtyData(({ id, data }) => { for (const t of S.terms.values()) if (t.ptyId === id) t.term.write(data); });
+// ---------- plain shell in the session's working folder (its own pty; nothing goes into the conversation) ----------
+const shellCwd = (s) => s.workCwd || s.cwd;
+function createShell(s) {
+  const { term, fit, box } = newXterm();
+  const status = el('span');
+  const btn = el('button', { onclick: () => (h.ptyId ? api.ptyKill(h.ptyId) : openShell(s)) });
+  const hide = el('button', { text: '숨기기', 'data-tip': '패널 숨기기 (⌃`) · 셸은 계속 실행', onclick: toggleShell });
+  const h = { term, fit, box, btn, status, ptyId: null, exited: false, bar: el('div', { class: 'term-bar' }, el('b', { class: 'shell-title', text: '셸' }), btn, status, lookButton(), hide) };
+  h.setLabel = () => { btn.textContent = h.ptyId ? '닫기' : '다시 열기'; };
+  h.setLabel();
+  term.onData((d) => h.ptyId && api.ptyWrite(h.ptyId, d));
+  term.onResize(({ cols, rows }) => h.ptyId && api.ptyResize(h.ptyId, cols, rows));
+  return h;
+}
+async function openShell(s) {
+  const h = S.shells.get(s.sessionId);
+  if (!h || h.ptyId) return;
+  if (h.exited) { h.exited = false; h.term.reset(); }
+  h.fit.fit();
+  h.btn.disabled = true;
+  h.ptyId = await api.ptyOpen({ shell: true, cwd: shellCwd(s), cols: h.term.cols, rows: h.term.rows });
+  h.btn.disabled = false;
+  h.setLabel();
+  h.status.textContent = `셸 · ${shortPath(shellCwd(s))} · 이 세션의 대화에는 기록되지 않습니다`;
+  h.term.focus();
+}
+// Bottom panel (VS Code style): one shell per session tab, shown under whatever sub-tab is open; hiding keeps the pty.
+const loadShellH = () => { try { return Math.max(120, Number(localStorage.getItem('shellH')) || 260); } catch { return 260; } };
+function toggleShell() {
+  S.shellOpen = !S.shellOpen;
+  try { localStorage.setItem('shellOpen', S.shellOpen ? '1' : ''); } catch { /* fine */ }
+  $('#session-detail .shell-toggle')?.replaceWith(el('button', { class: 'shell-toggle' + (S.shellOpen ? ' active' : ''), text: S.shellOpen ? '셸 ▾' : '셸 ▴', 'data-tip': `하단 셸 패널 ${S.shellOpen ? '숨기기' : '열기'} (⌃\`)`, onclick: toggleShell }));
+  renderShellPanel();
+  if (!S.shellOpen) S.terms.get(S.sel)?.term.focus();
+}
+function renderShellPanel() {
+  const sec = $('#session-detail'), s = cur(), old = sec.querySelector('.shell-panel');
+  if (!S.shellOpen || !s || S.view !== 'sessions') { old?.remove(); return; }
+  let h = S.shells.get(s.sessionId);
+  if (!h) { h = createShell(s); S.shells.set(s.sessionId, h); }
+  if (old?.dataset.id === s.sessionId) return;
+  old?.remove();
+  const panel = el('div', { class: 'shell-panel', 'data-id': s.sessionId, style: `height:${loadShellH()}px` });
+  const grip = el('div', { class: 'shell-grip', 'data-tip': '끌어서 높이 조절' });
+  grip.onmousedown = (e) => { // drag the top edge; the xterm refits through its ResizeObserver
+    e.preventDefault();
+    const startY = e.clientY, startH = panel.offsetHeight, max = sec.clientHeight - 160;
+    document.body.classList.add('resizing');
+    const move = (ev) => { panel.style.height = `${Math.min(max, Math.max(120, startH + (startY - ev.clientY)))}px`; };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); try { localStorage.setItem('shellH', String(panel.offsetHeight)); } catch { /* fine */ } };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  };
+  panel.append(grip, h.bar, h.box);
+  sec.append(panel);
+  requestAnimationFrame(() => { h.fit.fit(); h.term.focus(); if (!h.ptyId && !h.exited) openShell(s); }); // an exited shell stays as it was until "다시 열기"
+}
+function fitCurrent() { for (const t of [S.terms.get(S.sel), S.shells.get(S.sel)]) if (t?.box.isConnected) requestAnimationFrame(() => t.fit.fit()); }
+api.onPtyData(({ id, data }) => { for (const t of [...S.terms.values(), ...S.shells.values()]) if (t.ptyId === id) t.term.write(data); });
 api.onPtyExit(({ id, code }) => {
   for (const t of S.terms.values()) if (t.ptyId === id) {
     t.ptyId = null; t.btn.disabled = false; t.setLabel(); t.status.textContent = `떼어냄 (code ${code})`;
     t.term.write(`\r\n\x1b[90m[떼어냄 · 세션은 계속 실행 중 · 다시 붙으려면 위 버튼]\x1b[0m\r\n`);
+  }
+  for (const h of S.shells.values()) if (h.ptyId === id) {
+    h.ptyId = null; h.exited = true; h.btn.disabled = false; h.setLabel(); h.status.textContent = `셸 종료 (code ${code})`;
+    h.term.write(`\r\n\x1b[90m[셸 종료 · 다시 열려면 위 버튼]\x1b[0m\r\n`);
   }
 });
 window.addEventListener('resize', fitCurrent);
@@ -709,6 +790,7 @@ api.onShortcut(({ action, arg }) => {
   else if (action === 'new') $('#btn-new').click();
   else if (action === 'search') { menu.classList.remove('closed'); menu.classList.add('open'); $('#sess-search').focus(); $('#sess-search').select(); }
   else if (action === 'sub') { if (S.view !== 'sessions') setView('sessions'); if (cur()) { S.tab = arg; renderDetail(); } }
+  else if (action === 'shell') { if (S.view !== 'sessions') setView('sessions'); if (cur()) toggleShell(); }
 });
 document.addEventListener('keydown', (e) => {
   if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit[0-9]$/.test(e.code)) { e.preventDefault(); selectTabN(Number(e.code.slice(5))); }

@@ -52,6 +52,23 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   30/90 days or all), per-project and per-model tables, top tools, and an API-rate estimate from an
   editable price table (USD per MTok, stored in localStorage; subscription usage is not billed this way).
   Per-session scans keep per-model and per-day buckets, so the whole page is a sum of cached scans.
+- **대화 tab: tool rows hidden by default** — ⚙ tool calls (Bash, Write, …) and their 도구 결과 rows are hidden
+  unless the 도구 호출 checkbox in the bar is on (remembered). A full-text search hit inside a tool row reveals them.
+- **Terminal look (모양 button in the terminal bar)** — a theme gallery with preview swatches (Dracula, One Dark,
+  Tokyo Night, Catppuccin, Nord, Gruvbox, Solarized, Flexoki, Kanagawa, Everforest, Night Owl, Rosé Pine, Cobalt2,
+  Octocat, Hacker …) and a font picker: installed monospace families are detected (canvas width probe), any other
+  family can be typed, plus size. Applies live to every open terminal and shell; saved in localStorage.
+- **셸 panel (bottom, VS Code style)** — a plain terminal (your login shell) started in the session's working folder,
+  for commands you want to run next to the session without them entering the conversation (unlike `!cmd` in the
+  prompt). Toggle with ⌃` (menu 탭 → 셸 패널), or the 셸 button at the right of the sub-tab row; it sits under
+  whichever sub-tab is open, drag its top edge to resize (height remembered), and hiding keeps the shell running.
+  One shell per session tab; `exit` or 닫기 ends it, 다시 열기 starts a fresh one. Open/closed state is remembered.
+- **Terminal tab and Claude Code's fullscreen renderer** — Claude Code (2.1.30x) always draws attached background
+  sessions with its fullscreen renderer (alternate screen, in-app scrolling; the `tui` setting and
+  `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN` do not apply to them). Wheel scrolling therefore scrolls the TUI, and after a
+  wheel-up its auto-follow pauses. The app sends the TUI's `scroll:bottom` key (Ctrl+End) ahead of the first keystroke
+  after a wheel-up, so typing, ↑ for history or Enter lands back at the prompt like a classic terminal. The TUI's own
+  "Jump to bottom" button is clickable too.
 - **Terminal tab, live-log mode** — when there is no TUI to attach to (an SDK chat owned by this app, or an
   interactive session open in another terminal) the terminal shows a read-only live log instead: the last
   40 turns rendered terminal-style (❯ prompt, ● reply, ⚙ tool, ↳ result, ✱ 완료), then the transcript tail
@@ -71,7 +88,7 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
 - **Tab strip**: open tabs, their order and the selected tab are remembered across restarts (only a first run with nothing saved opens every running session); drag a tab to reorder (⌘1–9 follow the new order); when tabs overflow, ‹ › arrows appear at both ends and the mouse wheel scrolls the strip sideways.
 - **Shortcuts** (app menu "탭", so they work while the terminal has focus): ⌘1–9 / ⌘0 switch tabs (⌥digit
   too, fleet-style), ⌃Tab / ⌃⇧Tab next/previous, ⌘W closes the tab (never the window), ⌘N new session,
-  ⌘K opens the session list with the search box focused, ⌘⇧1–4 switch 터미널 / 대화 / 통계 / 메모리.
+  ⌘K opens the session list with the search box focused, ⌘⇧1–4 switch 터미널 / 대화 / 통계 / 메모리, ⌃` toggles the shell panel.
   Windows variant: Ctrl+Shift+N / K / W new session / search / close tab, Ctrl+1–9 tabs, Ctrl+Alt+1–4 sub-views,
   Ctrl+Shift+C / V copy / paste in the terminal.
 - **Needs-input alerts** — when a background session flips to blocked/`needs`, a macOS notification fires
