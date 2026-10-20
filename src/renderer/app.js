@@ -16,6 +16,11 @@ const fmtN = (n) => (n ?? 0).toLocaleString();
 const fmtTok = (n = 0) => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
 const fmtBytes = (n = 0) => n >= 1e6 ? (n / 1e6).toFixed(1) + ' MB' : (n / 1e3).toFixed(0) + ' KB';
 const fmtDur = (ms = 0) => { const h = Math.floor(ms / 3.6e6), m = Math.round((ms % 3.6e6) / 6e4); return h ? `${h}h ${m}m` : `${m}m`; };
+const pad2 = (n) => String(n).padStart(2, '0');
+// local-time formatters (the machine's zone, KST here): transcripts carry UTC ISO stamps
+const fmtLocalDate = (ts) => { const d = new Date(ts); return isNaN(d) ? '' : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const fmtLocalDT = (ts) => { const d = new Date(ts); return isNaN(d) ? '' : `${fmtLocalDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+const fmtLocalStamp = (ts) => { const d = new Date(ts); return isNaN(d) ? '' : `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }; // MM-DD HH:mm
 const fmtAgo = (ts) => {
   if (!ts) return '';
   const d = Date.now() - ts, m = d / 6e4, h = m / 60, day = h / 24;
@@ -518,7 +523,7 @@ async function showStats(s, pane) {
       tile('총 토큰', fmtTok(st.totalTokens)), tile('출력 토큰', fmtTok(tk.output)), tile('thinking 토큰', fmtTok(tk.thinking)),
       tile('입력(비캐시)', fmtTok(tk.input)), tile('캐시 읽기', fmtTok(tk.cacheRead)), tile('캐시 생성', fmtTok(tk.cacheCreate)),
       tile('기간', fmtDur(st.durationMs)), tile('파일', fmtBytes(st.size))),
-    el('p', { class: 'msg', text: `${st.firstTs?.slice(0, 16).replace('T', ' ') || ''} → ${st.lastTs?.slice(0, 16).replace('T', ' ') || ''}  ·  branch ${st.gitBranch || '-'}  ·  ${shortPath(st.cwd || '')}` }),
+    el('p', { class: 'msg', text: `${fmtLocalDT(st.firstTs)} → ${fmtLocalDT(st.lastTs)}  ·  branch ${st.gitBranch || '-'}  ·  ${shortPath(st.cwd || '')}` }),
     table('모델별 응답 수', st.models), table('effort', st.efforts), table('도구별 호출 수', st.tools), table('Claude Code 버전', st.versions, 6));
 }
 

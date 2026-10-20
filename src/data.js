@@ -297,7 +297,9 @@ async function listProfileSessions(p) {
 
 // ---------- stats (incremental scan of the transcript, cached by byte offset) ----------
 
-const STATS_VERSION = 2; // bump when the shape below changes: caches with another version are rescanned
+const STATS_VERSION = 3; // bump when the shape below changes: caches with another version are rescanned (3: days bucketed by local date)
+const pad2 = (n) => String(n).padStart(2, '0');
+const localDay = (ts) => { const d = new Date(ts); return isNaN(d) ? null : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }; // calendar day in the local time zone
 const bucket = () => ({ msgs: 0, tools: 0, input: 0, cacheRead: 0, cacheCreate: 0, output: 0 });
 function emptyStats() {
   return {
@@ -342,7 +344,8 @@ function ingest(line, s) {
       if (b.type === 'tool_use') { s.toolCalls++; tools++; inc(s.tools, b.name); }
     }
     addUsage(s.byModel[m.model || '?'] ||= bucket(), u, tools);
-    if (d.timestamp) addUsage(s.days[d.timestamp.slice(0, 10)] ||= bucket(), u, tools);
+    const day = d.timestamp && localDay(d.timestamp);
+    if (day) addUsage(s.days[day] ||= bucket(), u, tools);
   } else if (d.type === 'user' && !d.isMeta && !d.isSidechain) {
     const c = d.message?.content;
     if (typeof c === 'string' || (Array.isArray(c) && c.some((b) => b.type === 'text'))) s.userMessages++;

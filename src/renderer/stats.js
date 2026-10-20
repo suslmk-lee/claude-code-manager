@@ -32,12 +32,15 @@ const ST = { range: 30, metric: 'output', data: null, profile: '' }; // profile:
 const METRICS = { output: ['출력 토큰', (b) => b.output], total: ['총 토큰', (b) => b.input + b.cacheRead + b.cacheCreate + b.output], msgs: ['응답 수', (b) => b.msgs], tools: ['도구 호출', (b) => b.tools] };
 const PALETTE = ['var(--acc)', '#5b9cf6', '#4caf7d', '#e0b341', '#bd93f9', '#2aa198', '#e05d5d', '#f0a07a', '#8a919e'];
 const totalOf = (b) => (b.input || 0) + (b.cacheRead || 0) + (b.cacheCreate || 0) + (b.output || 0);
-const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
-const todayUTC = () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d; };
+// calendar days in the local time zone (the data layer buckets by local date too)
+const dayKey = (t) => fmtLocalDate(t);
+const todayLocal = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const parseDay = (s) => new Date(s + 'T00:00:00'); // local midnight
 // day buckets of the selected range (offset = periods back) as an array, oldest first
-function rangeRows(days, n, offset = 0) { const today = todayUTC(), rows = []; for (let i = n - 1 + offset * n; i >= offset * n; i--) { const d = dayKey(today - i * 864e5); rows.push({ d, b: days[d] || null }); } return rows; }
+function rangeRows(days, n, offset = 0) { const today = todayLocal(), rows = []; for (let i = n - 1 + offset * n; i >= offset * n; i--) { const d = dayKey(addDays(today, -i)); rows.push({ d, b: days[d] || null }); } return rows; }
 const sumRows = (rows, pick) => rows.reduce((a, r) => a + (r.b ? pick(r.b) : 0), 0);
-function rangeDays(days) { if (ST.range) return ST.range; const all = Object.keys(days).sort(); return Math.max(1, Math.round((todayUTC() - Date.parse(all[0] || Date.now())) / 864e5) + 1); }
+function rangeDays(days) { if (ST.range) return ST.range; const all = Object.keys(days).sort(); return Math.max(1, Math.round((todayLocal() - (all[0] ? parseDay(all[0]) : todayLocal())) / 864e5) + 1); }
 const seg = (opts, val, on) => el('div', { class: 'seg' }, ...opts.map(([v, t]) => el('button', { class: String(v) === String(val) ? 'active' : '', text: t, onclick: () => on(v) })));
 
 // ---- animation helpers ----
@@ -104,10 +107,10 @@ function dayChart(days) {
 
 // ---- activity heatmap (last 26 weeks, output tokens) ----
 function heatmap(days) {
-  const weeks = 26, today = todayUTC(), dow = today.getUTCDay();
-  const start = today - (weeks * 7 - 1 - (6 - dow)) * 864e5; // the grid ends on this week's Saturday column
+  const weeks = 26, today = todayLocal(), dow = today.getDay();
+  const start = addDays(today, -(weeks * 7 - 1 - (6 - dow))); // the grid ends on this week's Saturday column
   const cell = 13, gapPx = 3, L = 26, T = 16;
-  const vals = []; for (let i = 0; i < weeks * 7; i++) { const t = start + i * 864e5; if (t > today) break; vals.push(days[dayKey(t)]?.output || 0); }
+  const vals = []; for (let i = 0; i < weeks * 7; i++) { const t = addDays(start, i); if (t > today) break; vals.push(days[dayKey(t)]?.output || 0); }
   const nz = vals.filter(Boolean).sort((a, b) => a - b), q = (p) => nz.length ? nz[Math.min(nz.length - 1, Math.floor(p * nz.length))] : 0;
   const level = (v) => !v ? 0 : v <= q(0.25) ? 1 : v <= q(0.5) ? 2 : v <= q(0.8) ? 3 : 4;
   const W = L + weeks * (cell + gapPx), H = T + 7 * (cell + gapPx);
@@ -115,9 +118,9 @@ function heatmap(days) {
   ['일', '월', '화', '수', '목', '금', '토'].forEach((d, i) => { if (i % 2) svg += `<text x="0" y="${T + i * (cell + gapPx) + cell - 2}">${d}</text>`; });
   let lastMonth = -1, idx = 0;
   for (let w = 0; w < weeks; w++) for (let d = 0; d < 7; d++) {
-    const t = start + (w * 7 + d) * 864e5; if (t > today) continue;
-    const date = new Date(t), key = dayKey(t), b = days[key], v = b?.output || 0, lv = level(v);
-    if (d === 0 && date.getUTCMonth() !== lastMonth) { lastMonth = date.getUTCMonth(); svg += `<text x="${L + w * (cell + gapPx)}" y="10">${lastMonth + 1}월</text>`; }
+    const t = addDays(start, w * 7 + d); if (t > today) continue;
+    const date = t, key = dayKey(t), b = days[key], v = b?.output || 0, lv = level(v);
+    if (d === 0 && date.getMonth() !== lastMonth) { lastMonth = date.getMonth(); svg += `<text x="${L + w * (cell + gapPx)}" y="10">${lastMonth + 1}월</text>`; }
     const tip = `${key}${b ? `\n출력 ${fmtTok(b.output)} · 응답 ${fmtN(b.msgs)} · 도구 ${fmtN(b.tools)}` : '\n활동 없음'}`;
     svg += `<rect x="${L + w * (cell + gapPx)}" y="${T + d * (cell + gapPx)}" width="${cell}" height="${cell}" rx="3" class="l${lv}" style="--i:${idx++}" data-tip="${tip.replace(/"/g, '&quot;')}"/>`;
   }
@@ -130,7 +133,7 @@ function heatmap(days) {
 // ---- weekday profile: average output per weekday over the range ----
 function weekdayChart(days) {
   const rows = rangeRows(days, rangeDays(days)), sums = Array(7).fill(0), cnt = Array(7).fill(0);
-  for (const r of rows) { const d = new Date(r.d + 'T00:00:00Z').getUTCDay(); cnt[d]++; sums[d] += r.b?.output || 0; }
+  for (const r of rows) { const d = parseDay(r.d).getDay(); cnt[d]++; sums[d] += r.b?.output || 0; }
   const avg = sums.map((s, i) => cnt[i] ? s / cnt[i] : 0), max = Math.max(1, ...avg);
   const names = ['일', '월', '화', '수', '목', '금', '토'];
   return el('div', { class: 'wk' }, ...avg.map((v, i) => el('div', { class: 'wk-col', 'data-tip': `${names[i]}요일 평균 출력 ${fmtTok(v)}` },
@@ -202,7 +205,7 @@ function renderStats() {
   pane.replaceChildren(
     el('div', { class: 'stats-head' },
       el('h3', { text: '전체 통계' }),
-      el('span', { class: 'msg', text: `${g.firstTs?.slice(0, 10) || ''} → ${g.lastTs?.slice(0, 10) || ''} · 트랜스크립트가 있는 세션 ${fmtN(g.sessions)}개` }),
+      el('span', { class: 'msg', text: `${fmtLocalDate(g.firstTs)} → ${fmtLocalDate(g.lastTs)} · 트랜스크립트가 있는 세션 ${fmtN(g.sessions)}개 · 날짜는 현지 시간(KST) 기준` }),
       el('span', { class: 'spacer' }),
       S.profiles.length > 1 ? seg([['', '모든 프로파일'], ...S.profiles.map((p) => [p.id, p.id === 'default' ? 'Claude' : p.name])], ST.profile, (v) => { ST.profile = v; ST.data = null; loadStats(); }) : null,
       seg([[7, '7일'], [30, '30일'], [90, '90일'], [0, '전체']], ST.range, (v) => { ST.range = Number(v); renderStats(); }),

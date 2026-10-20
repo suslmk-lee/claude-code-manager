@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+process.env.TZ = 'Asia/Seoul'; // day buckets are local-date based
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ccm-test-'));
 process.env.CLAUDE_CONFIG_DIR = tmp;
 process.env.CLAUDE_BIN = '/bin/false'; // no real CLI in tests → listAgents() returns []
@@ -344,4 +345,12 @@ test('profiles: a sibling <config>-<id> dir is a second profile with its own ses
   await data.setPinned('55555555', true, 'alt');
   assert.ok(!(await data.readPins()).includes('55555555')); // pins are per profile: the default profile's list is untouched
   assert.equal(JSON.parse(fs.readFileSync(path.join(alt, 'jobs', 'pins.json'), 'utf8'))[0], '55555555');
+});
+
+test('daily buckets use the local (KST) calendar day', async () => {
+  const f = path.join(projA, 'tz-test.jsonl');
+  fs.writeFileSync(f, asst('2026-10-09T15:30:00.000Z', { output_tokens: 1 }, []) + asst('2026-10-09T14:59:00.000Z', { output_tokens: 2 }, [])); // 00:30 KST on the 10th, 23:59 KST on the 9th
+  const st = await data.fileStats(f);
+  assert.deepEqual(Object.keys(st.days).sort(), ['2026-10-09', '2026-10-10']);
+  assert.equal(st.days['2026-10-10'].output, 1);
 });

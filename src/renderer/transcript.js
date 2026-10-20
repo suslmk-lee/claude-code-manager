@@ -28,7 +28,7 @@ const PAGE = 200;
 
 const localTime = (ts) => ts ? new Date(ts).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' }) : '';
 function turnEl(t) {
-  const time = t.ts ? t.ts.slice(5, 16).replace('T', ' ') : '';
+  const time = t.ts ? fmtLocalStamp(t.ts) : ''; // local time (the raw stamps are UTC)
   if (t.role === 'meta') {
     if (t.kind === 'duration') return el('div', { class: 'turn meta', id: 'turn-' + t.i }, el('span', { class: 'glyph-ok', text: '✱' }), ` 완료 · ${(t.ms / 1000).toFixed(1)}s · ${localTime(t.ts)}`);
     return el('div', { class: 'turn meta recap', id: 'turn-' + t.i }, el('span', { class: 'glyph-ok', text: '※' }), el('b', { text: ' recap: ' }), t.text);
