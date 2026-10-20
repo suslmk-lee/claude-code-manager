@@ -250,6 +250,19 @@ const modelLabel = (m = '') => { const x = /^claude-([a-z]+)-(\d+)(?:-(\d+))?/.e
 const fmtUntil = (iso) => { const ms = Date.parse(iso) - Date.now(); if (!(ms > 0)) return ''; const h = Math.floor(ms / 36e5), m = Math.floor((ms % 36e5) / 6e4); return h >= 24 ? `${Math.floor(h / 24)}d${h % 24}h` : h ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`; };
 let usageCache = { at: 0, v: null };
 async function getUsage() { if (Date.now() - usageCache.at > 60000) { usageCache = { at: Date.now(), v: await api.usage().catch(() => null) }; } return usageCache.v; }
+// ---- account usage strip (sub-tab row): 5h / 7d / per-model (Fable) windows as mini gauges, refreshed every minute ----
+function renderUsageStrip(box, u) {
+  if (!u) { box.replaceChildren(el('span', { class: 'msg', text: '사용량 캐시 없음' })); return; }
+  const items = [['5h', u.fiveHour, '5시간 창'], ['7d', u.sevenDay, '7일 창'], ...(u.scoped || []).map((s) => [`${s.name} ${s.group === 'weekly' ? '7d' : s.group}`, s, `${s.name} 모델 ${s.group === 'weekly' ? '주간' : s.group} 한도`])];
+  box.replaceChildren(...items.filter(([, w]) => w && typeof w.pct === 'number').map(([label, w, desc]) => {
+    const cls = w.pct >= 90 ? 'bad' : w.pct >= 70 ? 'warn' : '';
+    return el('span', { class: 'ug', 'data-tip': `${desc} 사용률 ${w.pct}%${w.resetsAt ? ` · ${fmtUntil(w.resetsAt) || '곧'} 뒤 초기화` : ''}${u.fetchedAt ? `\n사용량 캐시 ${fmtAgo(u.fetchedAt)} 갱신 · Claude Code가 세션 중에 갱신` : ''}` },
+      el('span', { class: 'ug-l', text: label }), el('span', { class: 'ub' }, el('i', { class: cls, style: `width:${Math.min(100, w.pct)}%` })),
+      el('b', { class: cls, text: `${w.pct}%` }), w.resetsAt ? el('span', { class: 'ug-r', text: fmtUntil(w.resetsAt) || '곧' }) : null);
+  }));
+}
+function usageStrip() { const box = el('div', { class: 'usage-strip' }); getUsage().then((u) => renderUsageStrip(box, u)); return box; }
+setInterval(() => { const box = $('.usage-strip'); if (!box) return; usageCache.at = 0; getUsage().then((u) => renderUsageStrip(box, u)); }, 60000);
 function statusLine(s) {
   const sep = () => el('span', { class: 'sl-sep', text: '|' });
   const line = el('div', { class: 'statusline' });
@@ -303,7 +316,7 @@ function renderDetail() {
   if (S.tab === 'shell') S.tab = 'terminal'; // the shell is a bottom panel now, not a sub-tab
   const tabs = el('div', { class: 'tabs' }, el('div', { class: 'seg' }, ...[['terminal', '터미널'], ['transcript', '대화'], ['stats', '통계'], ['memory', '메모리']].map(([k, label]) =>
     el('button', { class: k === S.tab ? 'active' : '', text: label, onclick: () => { S.tab = k; renderDetail(); } }))),
-    shellToggleBtn());
+    usageStrip(), shellToggleBtn());
   const pane = el('div', { class: 'pane' + (S.tab === 'terminal' ? ' term' : '') });
   sec.replaceChildren(el('div', { class: 'head-wrap' }, el('div', { class: 'head-strip' }, el('i')), head), tabs, pane); // head is an overlay: hidden until the strip is hovered, so the pane never reflows
   renderShellPanel();

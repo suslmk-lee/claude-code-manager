@@ -169,7 +169,9 @@ async function readTailTitle(file, bytes = 65536) {
 }
 // Account rate-limit usage (5h / 7d) as Claude Code caches it; the user's statusline cache is the fallback.
 async function usage() {
-  const pick = (u, at) => u?.five_hour ? { fetchedAt: at || null, fiveHour: { pct: u.five_hour.utilization, resetsAt: u.five_hour.resets_at }, sevenDay: { pct: u.seven_day?.utilization, resetsAt: u.seven_day?.resets_at } } : null;
+  // scoped limits (e.g. a per-model weekly cap such as Fable) ride along in `limits`; the status-line cache fallback has none
+  const scoped = (u) => (Array.isArray(u?.limits) ? u.limits : []).filter((l) => l.scope?.model?.display_name && typeof l.percent === 'number').map((l) => ({ name: l.scope.model.display_name, group: l.group || l.kind, pct: l.percent, resetsAt: l.resets_at || null, active: !!l.is_active }));
+  const pick = (u, at) => u?.five_hour ? { fetchedAt: at || null, fiveHour: { pct: u.five_hour.utilization, resetsAt: u.five_hour.resets_at }, sevenDay: { pct: u.seven_day?.utilization, resetsAt: u.seven_day?.resets_at }, scoped: scoped(u) } : null;
   const cfg = await readJson(path.join(os.homedir(), '.claude.json'), null);
   return pick(cfg?.cachedUsageUtilization?.utilization, cfg?.cachedUsageUtilization?.fetchedAtMs)
     || pick(await readJson(path.join(HOME, 'statusline_cache.json'), null), null);

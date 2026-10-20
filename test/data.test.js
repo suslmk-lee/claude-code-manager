@@ -246,7 +246,7 @@ test('readTailTitle picks up permission mode, PR link, last model and context si
   assert.equal(t.lastTs, Date.parse('2026-10-13T06:45:01.903Z')); // sidechain and system records don't count
   assert.equal(await data.gitInfo('/nonexistent/dir'), null);
   const u = await data.usage(); // depends on the machine's caches; just the shape
-  assert.ok(u === null || typeof u.fiveHour.pct === 'number');
+  assert.ok(u === null || (typeof u.fiveHour.pct === 'number' && Array.isArray(u.scoped)));
 });
 
 test('user turns count image blocks', async () => {
