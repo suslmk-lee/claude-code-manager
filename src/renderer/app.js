@@ -509,6 +509,7 @@ async function showStats(s, pane) {
   pane.textContent = '집계 중…';
   const st = await api.sessionStats(s.sessionId);
   if (!st) { pane.textContent = '트랜스크립트 파일이 없습니다'; return; }
+  if (typeof renderSessionStats === 'function') return renderSessionStats(st, pane, s); // stats.js: same dashboard pieces as 전체 통계
   const tk = st.tokens;
   const tile = (k, v) => el('div', { class: 'tile' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: v }));
   const table = (title, obj, limit = 15) => {

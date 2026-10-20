@@ -38,7 +38,7 @@ const todayLocal = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return 
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const parseDay = (s) => new Date(s + 'T00:00:00'); // local midnight
 // day buckets of the selected range (offset = periods back) as an array, oldest first
-function rangeRows(days, n, offset = 0) { const today = todayLocal(), rows = []; for (let i = n - 1 + offset * n; i >= offset * n; i--) { const d = dayKey(addDays(today, -i)); rows.push({ d, b: days[d] || null }); } return rows; }
+function rangeRows(days, n, offset = 0, end = todayLocal()) { const rows = []; for (let i = n - 1 + offset * n; i >= offset * n; i--) { const d = dayKey(addDays(end, -i)); rows.push({ d, b: days[d] || null }); } return rows; }
 const sumRows = (rows, pick) => rows.reduce((a, r) => a + (r.b ? pick(r.b) : 0), 0);
 function rangeDays(days) { if (ST.range) return ST.range; const all = Object.keys(days).sort(); return Math.max(1, Math.round((todayLocal() - (all[0] ? parseDay(all[0]) : todayLocal())) / 864e5) + 1); }
 const seg = (opts, val, on) => el('div', { class: 'seg' }, ...opts.map(([v, t]) => el('button', { class: String(v) === String(val) ? 'active' : '', text: t, onclick: () => on(v) })));
@@ -64,7 +64,7 @@ function kpi(label, value, fmt, { spark, color = 'var(--acc)', delta, sub, i = 0
   const v = el('div', { class: 'v' });
   const d = delta != null && isFinite(delta)
     ? el('div', { class: 'delta ' + (delta > 0.005 ? 'up' : delta < -0.005 ? 'down' : 'flat'), text: `${delta > 0.005 ? '▲' : delta < -0.005 ? '▼' : '•'} ${Math.abs(delta * 100).toFixed(0)}% vs 이전`, 'data-tip': `같은 길이의 직전 기간(${n}일) 대비 증감` })
-    : sub ? el('div', { class: 'delta flat', text: sub }) : null;
+    : sub ? el('div', { class: 'delta flat', text: sub, 'data-tip': sub }) : null;
   const card = el('div', { class: 'kpi', style: `--i:${i}` }, el('div', { class: 'k', text: label }), v, d, spark ? sparkline(spark, color) : null);
   requestAnimationFrame(() => countUp(v, value, fmt));
   return card;
@@ -78,14 +78,14 @@ async function loadStats() {
 }
 
 // ---- daily bars + 7-day moving average ----
-function dayChart(days) {
-  const [label, pick] = METRICS[ST.metric];
-  const rows = rangeRows(days, rangeDays(days)).map((r) => ({ ...r, v: r.b ? pick(r.b) : 0 }));
+function dayChart(days, { metric = ST.metric, n = rangeDays(days), end = todayLocal() } = {}) {
+  const [label, pick] = METRICS[metric];
+  const rows = rangeRows(days, n, 0, end).map((r) => ({ ...r, v: r.b ? pick(r.b) : 0 }));
   const W = 960, H = 240, L = 56, R = 12, T = 14, B = 28, iw = W - L - R, ih = H - T - B;
   const max = Math.max(1, ...rows.map((r) => r.v));
   const mag = 10 ** Math.floor(Math.log10(max)), nice = Math.ceil(max / mag) * mag;
   const bw = iw / rows.length, gap = Math.min(3, bw * 0.25), every = Math.ceil(rows.length / 8), lastLabel = Math.floor((rows.length - 1) / every) * every;
-  const fmt = ST.metric === 'msgs' || ST.metric === 'tools' ? fmtN : fmtTok;
+  const fmt = metric === 'msgs' || metric === 'tools' ? fmtN : fmtTok;
   const y = (v) => T + ih - (v / nice) * ih;
   let svg = `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="일별 ${label}"><defs><linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--acc);stop-opacity:.95"/><stop offset="1" style="stop-color:var(--acc);stop-opacity:.4"/></linearGradient></defs>`;
   for (const f of [0.25, 0.5, 0.75, 1]) { const yy = y(nice * f); svg += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" class="grid"/><text x="${L - 8}" y="${yy + 4}" class="axis" text-anchor="end">${fmt(nice * f)}</text>`; }
@@ -248,4 +248,38 @@ function priceEditor(prices, used) {
     el('summary', { text: '단가표 (USD / 1M 토큰) — API 요금 환산용. 구독 사용량에는 청구되지 않습니다. 2026-09-25 공개 단가 기준, 수정 가능' }),
     el('table', {}, el('tr', {}, ...['모델', '입력', '캐시 읽기', '캐시 생성', '출력'].map((h) => el('th', { text: h }))), ...keys.map(row)),
     el('button', { text: '기본값 복원', onclick: () => { localStorage.removeItem('prices'); renderStats(); } }));
+}
+
+// ---- per-session 통계 sub-tab: the same building blocks for one transcript ----
+const SS = { metric: 'output' };
+function renderSessionStats(st, pane, s) {
+  const prices = loadPrices(), tk = st.tokens, total = st.totalTokens;
+  const dayKeys = Object.keys(st.days).sort(), first = dayKeys[0], last = dayKeys[dayKeys.length - 1];
+  const span = first ? Math.round((parseDay(last) - parseDay(first)) / 864e5) + 1 : 1, n = Math.min(120, Math.max(span, 7));
+  const series = rangeRows(st.days, Math.min(n, 30), 0, last ? parseDay(last) : todayLocal());
+  const models = Object.entries(st.byModel).sort((a, b) => b[1].output - a[1].output);
+  const donutEntries = models.slice(0, 6).map(([m, b], i) => ({ name: m, value: b.output, color: PALETTE[i % PALETTE.length], sub: `응답 ${fmtN(b.msgs)} · 출력 ${fmtTok(b.output)} · ${fmtUsd(cost(b, priceFor(prices, m)))}` }));
+  const tools = Object.entries(st.tools).sort((a, b) => b[1] - a[1]);
+  const counts = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k, value: v }));
+  const cacheHit = (tk.cacheRead / ((tk.input + tk.cacheRead + tk.cacheCreate) || 1)) * 100;
+  pane.replaceChildren(
+    el('div', { class: 'kpis' },
+      kpi('사용자 메시지', st.userMessages, fmtN, { i: 0, sub: `어시스턴트 응답 ${fmtN(st.assistantMessages)}${st.sidechainMessages ? ` · 서브에이전트 ${fmtN(st.sidechainMessages)}` : ''}` }),
+      kpi('도구 호출', st.toolCalls, fmtN, { i: 1, color: '#5b9cf6', spark: series.map((r) => r.b?.tools || 0), sub: `응답당 ${(st.toolCalls / (st.assistantMessages || 1)).toFixed(1)}회` }),
+      kpi('출력 토큰', tk.output, fmtTok, { i: 2, color: 'var(--ok)', spark: series.map((r) => r.b?.output || 0), sub: `thinking ${fmtTok(tk.thinking)}` }),
+      kpi('총 토큰', total, fmtTok, { i: 3, color: 'var(--warn)', spark: series.map((r) => (r.b ? totalOf(r.b) : 0)), sub: `캐시 적중률 ${cacheHit.toFixed(1)}%` }),
+      kpi('기간', st.durationMs, (ms) => fmtDur(ms), { i: 4, sub: `${fmtLocalDT(st.firstTs)} → ${fmtLocalDT(st.lastTs)}` }),
+      kpi('활동일', dayKeys.length, fmtN, { i: 5, sub: `${span}일 중 · 하루 평균 출력 ${fmtTok(dayKeys.length ? tk.output / dayKeys.length : 0)}` }),
+      kpi('API 요금 환산', costOf(st.byModel, prices) || 0, fmtUsd, { i: 6, sub: '단가표 기준 · 구독에는 청구되지 않음' }),
+      kpi('트랜스크립트', st.size, fmtBytes, { i: 7, sub: `${st.gitBranch ? `branch ${st.gitBranch} · ` : ''}${shortPath(st.cwd || s.cwd || '')}` })),
+    card('일별 추이', dayChart(st.days, { metric: SS.metric, n, end: last ? parseDay(last) : todayLocal() }),
+      seg(Object.entries(METRICS).map(([k, [t]]) => [k, t]), SS.metric, (v) => { SS.metric = v; renderSessionStats(st, pane, s); })),
+    el('div', { class: 'row2col' },
+      card('모델 비중', models.length ? donut(donutEntries, fmtTok(tk.output), '출력 토큰') : el('p', { class: 'msg', text: '응답 없음' }), el('span', { class: 'msg', text: '출력 토큰 기준' })),
+      card('토큰 구성', tokenMix(tk))),
+    el('div', { class: 'row2col' },
+      card('도구 호출', tools.length ? rankBars(tools.slice(0, 12).map(([t, c]) => ({ name: t, value: c, sub: `${(c / (st.toolCalls || 1) * 100).toFixed(0)}%` })), fmtN) : el('p', { class: 'msg', text: '도구 호출 없음' }), el('span', { class: 'msg', text: `상위 ${Math.min(12, tools.length)} / ${tools.length}` })),
+      el('div', { class: 'stack-cards' },
+        card('effort', Object.keys(st.efforts).length ? rankBars(counts(st.efforts), fmtN) : el('p', { class: 'msg', text: '기록 없음' }), el('span', { class: 'msg', text: '응답 수' })),
+        card('Claude Code 버전', rankBars(counts(st.versions).slice(0, 6), fmtN), el('span', { class: 'msg', text: '응답 수' })))));
 }
