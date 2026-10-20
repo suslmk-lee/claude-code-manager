@@ -47,7 +47,7 @@ const paint = (text, s) => (s ? `\x1b[${s}m${text}${RST}` : text);
 function inline(tokens, base = '', out = []) {
   for (const t of tokens || []) {
     switch (t.type) {
-      case 'strong': inline(t.tokens, sgr(base, '1'), out); break;
+      case 'strong': case 'strongLoose': inline(t.tokens, sgr(base, '1'), out); break; // strongLoose: transcript.js's extension on the shared marked (bold closing before Korean particles)
       case 'em': inline(t.tokens, sgr(base, '3'), out); break;
       case 'del': inline(t.tokens, sgr(base, '9'), out); break;
       case 'codespan': out.push([decode(t.text), sgr(base, CODE_FG)]); break;

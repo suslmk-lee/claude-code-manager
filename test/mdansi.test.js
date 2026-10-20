@@ -71,3 +71,11 @@ test('single tildes are plain text; only ~~double~~ strikes through', () => {
   assert.ok(/\x1b\[9m취소/.test(out), 'double tildes still strike through');
   assert.strictEqual(strip(out).trim(), '3~5개월차 중 약 8~10주, 취소');
 });
+
+test('bold from the renderer\'s strongLoose extension (shared marked) is styled, not left as **', () => {
+  require('marked').marked.use({ extensions: [{ name: 'strongLoose', level: 'inline', start: (s) => s.indexOf('**'), // as registered by transcript.js
+    tokenizer(src) { const m = /^\*\*(?=\S)([^\n]*?\S)\*\*/.exec(src); return m ? { type: 'strongLoose', raw: m[0], tokens: this.lexer.inlineTokens(m[1]) } : undefined; } }] });
+  const out = mdToAnsi('**넘겨주지 않은 세션은**은 읽기 전용', { cols: 80, indent: 0 });
+  assert.match(out, /\x1b\[1m넘겨주지 않은 세션은\x1b\[0m/);
+  assert.ok(!strip(out).includes('**'));
+});
