@@ -793,9 +793,10 @@ async function renderProfilePop() {
       el('div', { class: 'msg', text: `사용량 캐시 ${u.fetchedAt ? fmtAgo(u.fetchedAt) + ' 갱신' : ''} · Claude Code가 세션 중에 갱신합니다` })) : el('div', { class: 'msg', text: '사용량 캐시 없음' }),
     el('div', { class: 'row right', style: 'margin-top:8px' }, el('button', { text: '다시 읽기', onclick: () => { usageCache.at = 0; renderProfile().then(renderProfilePop); } })));
 }
-$('#btn-profile').onclick = () => { pmenu.classList.toggle('open'); if (pmenu.classList.contains('open')) renderProfilePop(); };
+$('#btn-profile').onclick = () => { pmenu.classList.toggle('open'); if (pmenu.classList.contains('open')) renderProfilePop(); }; // click pins it open
+pmenu.onmouseenter = () => renderProfilePop(); // the flyout opens on hover (CSS): refresh its contents then, no click needed
 document.addEventListener('mousedown', (e) => { if (!pmenu.contains(e.target)) pmenu.classList.remove('open'); }, true);
-renderProfile();
+renderProfile().then(renderProfilePop); // filled up front, so the hover flyout is never an empty box
 
 // ---------- keyboard shortcuts (menu accelerators via main, ⌥digit directly; Ctrl+Shift+N/K/W and Ctrl+Alt+1-4 off mac) ----------
 function selectTabN(n) { const id = n === 0 ? S.tabs[S.tabs.length - 1] : S.tabs[n - 1]; if (id) openSession(id); }
