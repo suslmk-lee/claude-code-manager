@@ -352,10 +352,19 @@ function createTerm(s) {
   // after a wheel-up, auto-follow pauses and typing no longer brings the prompt back into view. So the first keystroke after
   // a wheel-up is preceded by its scroll:bottom key (Ctrl+End), which jumps to the latest message and re-enables auto-follow.
   // Mouse (SGR `\e[<`, X10 `\e[M`) and focus (`\e[I`/`\e[O`) reports are not keystrokes.
+  // However the view got there (wheel, PageUp, drag-selecting past the edge, clicking the "earlier prompt" row), the TUI
+  // shows a "Jump to bottom" / "N new messages" button while scrolled up: look for it on screen at each keystroke.
+  const SCROLLED_UP_HINT = /Jump to bottom|\d+ new messages?/;
+  const tuiScrolledUp = () => { const b = term.buffer.active; for (let i = b.viewportY, end = Math.min(b.length, b.viewportY + term.rows); i < end; i++) if (SCROLLED_UP_HINT.test(b.getLine(i)?.translateToString(true) || '')) return true; return false; };
   term.onData((d) => {
     if (!t.ptyId) return;
     if (/^\x1b\[[<MIO]/.test(d)) { if (/^\x1b\[<64;/.test(d)) t.wheeledUp = true; } // SGR button 64 = wheel up
-    else if (t.wheeledUp) { t.wheeledUp = false; if (term.buffer.active.type === 'alternate') api.ptyWrite(t.ptyId, '\x1b[1;5F'); }
+    else {
+      const b = term.buffer.active;
+      if (b.type === 'alternate') { if (t.wheeledUp || tuiScrolledUp()) api.ptyWrite(t.ptyId, '\x1b[1;5F'); }
+      else if (b.viewportY < b.baseY) term.scrollToBottom(); // classic renderer: xterm's own scrollback
+      t.wheeledUp = false;
+    }
     api.ptyWrite(t.ptyId, d);
   });
   term.onResize(({ cols, rows }) => t.ptyId && api.ptyResize(t.ptyId, cols, rows));
