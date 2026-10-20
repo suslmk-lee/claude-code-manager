@@ -16,7 +16,7 @@ const strongLoose = {
   tokenizer(src) { const m = /^\*\*(?=\S)([^\n]*?\S)\*\*/.exec(src); return m ? { type: 'strongLoose', raw: m[0], tokens: this.lexer.inlineTokens(m[1]) } : undefined; },
   renderer(token) { return `<strong>${this.parser.parseInline(token.tokens)}</strong>`; },
 };
-marked.use({ renderer: mdRenderer, gfm: true, breaks: true, extensions: [strongLoose] });
+marked.use({ renderer: mdRenderer, gfm: true, breaks: true, extensions: [strongLoose], tokenizer: delDoubleOnly }); // delDoubleOnly: mdansi.js (shared) — only ~~double~~ tildes strike through
 function mdBody(text) { const d = el('div', { class: 'md-body' }); d.innerHTML = marked.parse(text || ''); return d; }
 // 대화 서브탭: read-only transcript (paged from the end) and the flyout's full-text search.
 

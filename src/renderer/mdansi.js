@@ -2,6 +2,16 @@
 // Walks marked's token tree; text is laid out as styled segments so wrapping is width-aware and SGR never leaks across lines.
 (function () {
 const _marked = globalThis.marked || (typeof require === 'function' ? require('marked').marked : null); // renderer is sandboxed: no require there
+// GFM also treats single-tilde pairs as strikethrough, which eats ranges like "3~5개월 중 8~10주": only ~~double~~ counts.
+// Applied to the shared marked instance, so the 대화 tab (HTML) and this ANSI renderer agree.
+const delDoubleOnly = {
+  del(src) {
+    const m = /^~~(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src);
+    if (m) return { type: 'del', raw: m[0], text: m[1], tokens: this.lexer.inlineTokens(m[1]) };
+    return src[0] === '~' ? { type: 'text', raw: '~', text: '~' } : false; // a lone ~ is just a character
+  },
+};
+_marked?.use({ tokenizer: delDoubleOnly });
 
 const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
 const RST = '\x1b[0m';
@@ -161,12 +171,12 @@ function blocks(tokens, width, base = '', tight = false) {
 function mdToAnsi(md, { cols = 80, indent = 2, first = ' '.repeat(indent) } = {}) {
   const width = Math.max(10, cols - indent - 1); // -1: never touch the last column (avoids deferred-wrap quirks)
   let lines;
-  try { lines = blocks(_marked.lexer(String(md || ''), { gfm: true }), width); } catch { lines = String(md || '').split('\n'); }
+  try { lines = blocks(_marked.lexer(String(md || '')), width); } catch { lines = String(md || '').split('\n'); } // default options = gfm + the tokenizer above
   while (lines.length && lines[lines.length - 1] === '') lines.pop();
   if (!lines.length) lines = [''];
   return lines.map((l, i) => (i ? (l ? ' '.repeat(indent) + l : l) : first + l)).join('\r\n');
 }
 
-const api = { mdToAnsi, strWidth, truncW };
+const api = { mdToAnsi, strWidth, truncW, delDoubleOnly };
 if (typeof module !== 'undefined') module.exports = api; else Object.assign(globalThis, api); // IIFE: classic-script consts would otherwise clash with other renderer files
 })();

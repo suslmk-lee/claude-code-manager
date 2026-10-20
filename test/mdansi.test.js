@@ -63,3 +63,11 @@ test('overly wide table fits within cols', () => {
   assert.equal(new Set(tbl.map(strWidth)).size, 1);
   assert.ok(tbl.length > 6); // cells wrapped into extra lines
 });
+
+test('single tildes are plain text; only ~~double~~ strikes through', () => {
+  const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+  const out = mdToAnsi('3~5개월차 중 약 8~10주, ~~취소~~', { cols: 80, indent: 0 });
+  assert.ok(!/\x1b\[9m5개월차/.test(out), 'range tildes must not become strikethrough');
+  assert.ok(/\x1b\[9m취소/.test(out), 'double tildes still strike through');
+  assert.strictEqual(strip(out).trim(), '3~5개월차 중 약 8~10주, 취소');
+});
