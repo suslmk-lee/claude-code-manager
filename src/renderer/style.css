@@ -70,6 +70,17 @@ button.nav.active:hover, button.primary:hover { background:linear-gradient(180de
 button.danger { color:var(--bad); }
 button:disabled { opacity:.45; cursor:default; transform:none; box-shadow:none; }
 input, select, textarea { background:var(--field); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; width:100%; }
+/* selects: themed chevron on the closed control (the open list is drawn by select.js) */
+select { appearance:none; -webkit-appearance:none; padding-right:30px; cursor:pointer; background-image:linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%); background-position:calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; transition:border-color .15s, box-shadow .15s; }
+select:hover { border-color:color-mix(in srgb, var(--line) 50%, var(--dim)); }
+select:focus-visible { outline:none; border-color:var(--acc); box-shadow:0 0 0 3px color-mix(in srgb, var(--acc) 30%, transparent); }
+.dd { position:fixed; z-index:80; min-width:160px; max-height:320px; overflow:auto; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:9px; box-shadow:0 14px 36px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04); animation:dd-in .12s ease-out; }
+.dd-opt { position:relative; padding:6px 12px 6px 28px; border-radius:6px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+.dd-opt.sel::before { content:'✓'; position:absolute; left:10px; top:6px; font-size:12px; color:var(--acc); }
+.dd-opt.sel { background:var(--hover); }
+.dd-opt:hover:not(.dis) { background:var(--acc); color:var(--on-acc); } .dd-opt:hover:not(.dis)::before { color:var(--on-acc); }
+.dd-opt.dis { opacity:.45; cursor:default; }
+@keyframes dd-in { from { opacity:0; transform:translateY(-4px); } }
 main.view { flex:1; display:flex; min-height:0; }
 main.hidden { display:none; }
 aside { width:320px; min-width:240px; border-right:1px solid var(--line); overflow:auto; background:var(--panel); display:flex; flex-direction:column; }
