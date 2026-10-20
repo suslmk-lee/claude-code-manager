@@ -54,6 +54,10 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   Per-session scans keep per-model and per-day buckets, so the whole page is a sum of cached scans.
 - **대화 tab: tool rows hidden by default** — ⚙ tool calls (Bash, Write, …) and their 도구 결과 rows are hidden
   unless the 도구 호출 checkbox in the bar is on (remembered). A full-text search hit inside a tool row reveals them.
+- **App themes (모양 button in the header or terminal bar → 앱 테마)** — 14 chrome themes with window-style preview
+  swatches: 기본 그라파이트 (주황/파랑/초록), 모노크롬, Dracula, Nord, Tokyo Night, Catppuccin Mocha, Gruvbox, Rosé Pine,
+  Solarized Dark, and light ones (라이트, Solarized Light, Catppuccin Latte). A theme sets ~12 base colours; buttons,
+  hovers, selections and borders are derived with CSS color-mix. The 기본 terminal theme follows the app background.
 - **Terminal look (모양 button in the terminal bar)** — a theme gallery with preview swatches (Dracula, One Dark,
   Tokyo Night, Catppuccin, Nord, Gruvbox, Solarized, Flexoki, Kanagawa, Everforest, Night Owl, Rosé Pine, Cobalt2,
   Octocat, Hacker …) and a font picker: installed monospace families are detected (canvas width probe), any other

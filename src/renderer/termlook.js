@@ -36,16 +36,45 @@ const DEFAULT_FONT_STACK = '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "C
 // monospace families worth offering when installed (checked below); anything else goes in the free-text field
 const FONT_CANDIDATES = ['D2Coding', 'D2CodingLigature', 'NanumGothicCoding', 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'Fira Code', 'FiraCode Nerd Font', 'Cascadia Code', 'Cascadia Mono', 'SF Mono', 'Menlo', 'Monaco', 'Source Code Pro', 'IBM Plex Mono', 'Hack', 'Hack Nerd Font', 'MesloLGS NF', 'Inconsolata', 'Ubuntu Mono', 'Roboto Mono', 'Victor Mono', 'Iosevka', 'Consolas', 'Courier New', 'Pretendard Mono', 'Sarasa Mono K'];
 
-const LOOK = (() => { try { return { theme: 'default', font: '', size: 13, alpha: 1, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { theme: 'default', font: '', size: 13, alpha: 1 }; } })();
+const LOOK = (() => { try { return { app: 'default', theme: 'default', font: '', size: 13, alpha: 1, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { app: 'default', theme: 'default', font: '', size: 13, alpha: 1 }; } })();
+
+// App (chrome) themes: base colours only — style.css derives buttons, hovers, selections, borders from them with color-mix.
+const APP_THEMES = [
+  { id: 'default', name: '기본 (그라파이트 · 주황)', bg: '#111317', panel: '#181b21', line: '#2a2f3a', fg: '#d7dae0', dim: '#8a919e', acc: '#d97757', ok: '#4caf7d', warn: '#e0b341', bad: '#e05d5d', field: '#0d0f13', link: '#8ab4f8' },
+  { id: 'graphite-blue', name: '그라파이트 · 파랑', bg: '#111317', panel: '#181b21', line: '#2a2f3a', fg: '#d7dae0', dim: '#8a919e', acc: '#5b9cf6', ok: '#4caf7d', warn: '#e0b341', bad: '#e05d5d', field: '#0d0f13', link: '#8ab4f8' },
+  { id: 'graphite-green', name: '그라파이트 · 초록', bg: '#101412', panel: '#161c18', line: '#27312b', fg: '#d6dfd8', dim: '#88968c', acc: '#4caf7d', ok: '#6fcf97', warn: '#e0b341', bad: '#e05d5d', field: '#0b0f0d', link: '#8fd3b0' },
+  { id: 'mono', name: '모노크롬', bg: '#0e0e10', panel: '#161618', line: '#2a2a2e', fg: '#e4e4e7', dim: '#8e8e95', acc: '#c9c9cf', ok: '#9ad0a8', warn: '#d9c27a', bad: '#d97b7b', field: '#0a0a0b', link: '#b8c4ff', onAcc: '#111' },
+  { id: 'dracula', name: 'Dracula', bg: '#282a36', panel: '#21222c', line: '#44475a', fg: '#f8f8f2', dim: '#8d93b3', acc: '#bd93f9', ok: '#50fa7b', warn: '#f1fa8c', bad: '#ff5555', field: '#1e1f29', link: '#8be9fd', onAcc: '#1b1c26' },
+  { id: 'nord', name: 'Nord', bg: '#2e3440', panel: '#272c36', line: '#434c5e', fg: '#eceff4', dim: '#9aa5b5', acc: '#88c0d0', ok: '#a3be8c', warn: '#ebcb8b', bad: '#bf616a', field: '#242933', link: '#81a1c1', onAcc: '#1f252e' },
+  { id: 'tokyonight', name: 'Tokyo Night', bg: '#1a1b26', panel: '#16161e', line: '#2f3549', fg: '#c0caf5', dim: '#7982a9', acc: '#7aa2f7', ok: '#9ece6a', warn: '#e0af68', bad: '#f7768e', field: '#13131a', link: '#7dcfff', onAcc: '#14151f' },
+  { id: 'catppuccin', name: 'Catppuccin Mocha', bg: '#1e1e2e', panel: '#181825', line: '#313244', fg: '#cdd6f4', dim: '#a6adc8', acc: '#cba6f7', ok: '#a6e3a1', warn: '#f9e2af', bad: '#f38ba8', field: '#11111b', link: '#89b4fa', onAcc: '#1e1e2e' },
+  { id: 'gruvbox', name: 'Gruvbox', bg: '#282828', panel: '#1d2021', line: '#3c3836', fg: '#ebdbb2', dim: '#a89984', acc: '#fe8019', ok: '#b8bb26', warn: '#fabd2f', bad: '#fb4934', field: '#1b1b1b', link: '#83a598', onAcc: '#1d2021' },
+  { id: 'rosepine', name: 'Rosé Pine', bg: '#191724', panel: '#1f1d2e', line: '#403d52', fg: '#e0def4', dim: '#908caa', acc: '#ebbcba', ok: '#9ccfd8', warn: '#f6c177', bad: '#eb6f92', field: '#15131f', link: '#c4a7e7', onAcc: '#191724' },
+  { id: 'solarized-dark', name: 'Solarized Dark', bg: '#002b36', panel: '#073642', line: '#12515f', fg: '#eee8d5', dim: '#93a1a1', acc: '#268bd2', ok: '#859900', warn: '#b58900', bad: '#dc322f', field: '#00242e', link: '#2aa198' },
+  { id: 'light', name: '라이트 (주황)', light: true, bg: '#f6f7f9', panel: '#ffffff', line: '#d9dde3', fg: '#1f2329', dim: '#6b7380', acc: '#d97757', ok: '#2e9b5f', warn: '#b98900', bad: '#d64545', field: '#ffffff', link: '#1a56db', strong: '#000' },
+  { id: 'solarized-light', name: 'Solarized Light', light: true, bg: '#fdf6e3', panel: '#eee8d5', line: '#d9d2bd', fg: '#073642', dim: '#657b83', acc: '#cb4b16', ok: '#859900', warn: '#b58900', bad: '#dc322f', field: '#fffdf5', link: '#268bd2', strong: '#002b36' },
+  { id: 'latte', name: 'Catppuccin Latte', light: true, bg: '#eff1f5', panel: '#e6e9ef', line: '#ccd0da', fg: '#4c4f69', dim: '#6c6f85', acc: '#8839ef', ok: '#40a02b', warn: '#df8e1d', bad: '#d20f39', field: '#ffffff', link: '#1e66f5', strong: '#1e1e2e' },
+];
+const appTheme = () => APP_THEMES.find((t) => t.id === LOOK.app) || APP_THEMES[0];
+function applyAppTheme() {
+  const a = appTheme(), st = document.documentElement.style;
+  for (const k of ['bg', 'panel', 'line', 'fg', 'dim', 'acc', 'ok', 'warn', 'bad', 'field', 'link']) st.setProperty(`--${k}`, a[k]);
+  st.setProperty('--on-acc', a.onAcc || '#fff');
+  st.setProperty('--strong', a.strong || '#fff');
+  st.colorScheme = a.light ? 'light' : 'dark'; // scrollbars, form controls
+}
+// the 기본 terminal theme follows the app theme's background (so a light app theme gets a light terminal)
+const termBase = (t) => (t.id === 'default' ? { bg: appTheme().bg, fg: appTheme().light ? appTheme().fg : '#ffffff' } : { bg: t.bg, fg: t.fg });
 // terminal background transparency (macOS: the window is created transparent, so the desktop shows through the terminal only)
 const alphaOn = () => isMac && LOOK.alpha < 1;
 const withAlpha = (hex, a) => { const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex); return m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${a})` : hex; };
 const saveLook = () => { try { localStorage.setItem('termLook', JSON.stringify(LOOK)); } catch { /* fine */ } };
 
 function xtermTheme(t) {
-  const th = { background: t.bg, foreground: t.fg, cursor: t.cursor || t.fg, cursorAccent: t.bg, selectionBackground: t.sel || undefined };
+  const base = termBase(t);
+  const th = { background: base.bg, foreground: base.fg, cursor: t.cursor || base.fg, cursorAccent: base.bg, selectionBackground: t.sel || undefined };
   if (t.ansi) ANSI_KEYS.forEach((k, i) => { th[k] = t.ansi[i]; });
-  const out = t.id === 'default' ? { background: t.bg } : th; // xterm's own defaults for the rest
+  const out = t.id === 'default' && !appTheme().light ? { background: base.bg } : th; // dark default: xterm's own colours for the rest
   if (alphaOn()) out.background = 'rgba(0, 0, 0, 0)'; // the pane paints the one translucent layer (--term-bg); xterm must not add a second one
   return out;
 }
@@ -68,22 +97,30 @@ const hasFont = (() => {
 
 function applyLook() {
   const o = xtermOptions();
-  document.documentElement.style.setProperty('--term-bg', alphaOn() ? withAlpha(currentTheme().bg, LOOK.alpha) : currentTheme().bg);
+  applyAppTheme();
+  const tbg = termBase(currentTheme()).bg;
+  document.documentElement.style.setProperty('--term-bg', alphaOn() ? withAlpha(tbg, LOOK.alpha) : tbg);
   document.documentElement.classList.toggle('translucent', alphaOn()); // page chrome stays opaque, the terminal areas go see-through
   for (const t of [...(S.terms?.values() || []), ...(S.shells?.values() || [])]) {
     t.term.options.theme = o.theme; t.term.options.fontFamily = o.fontFamily; t.term.options.fontSize = o.fontSize;
     if (t.box.isConnected) t.fit.fit();
   }
   saveLook();
-  $('#term-look')?.querySelectorAll('.theme-row').forEach((r) => r.classList.toggle('sel', r.dataset.id === LOOK.theme));
+  $('#term-look')?.querySelectorAll('.theme-row[data-id]').forEach((r) => r.classList.toggle('sel', r.dataset.id === LOOK.theme));
+  $('#term-look')?.querySelectorAll('.theme-row[data-app]').forEach((r) => r.classList.toggle('sel', r.dataset.app === LOOK.app));
 }
 applyLook(); // the pane background follows the theme from the first paint
 
 function swatch(t) { // mini preview like a theme gallery: two text bars, then green / fg / yellow blocks
-  const c = (i, fb) => (t.ansi ? t.ansi[i] : fb);
-  return el('span', { class: 'swatch', style: `background:${t.bg};border-color:${t.ansi ? c(8, '#444') : '#3a3f4a'}` },
-    el('i', { style: `background:${t.fg};width:70%` }), el('i', { style: `background:${c(8, '#8a919e')};width:55%` }),
-    el('b', {}, el('i', { style: `background:${c(2, '#4caf7d')};width:28%` }), el('i', { style: `background:${t.fg};width:34%` }), el('i', { style: `background:${c(3, '#e0b341')};width:8%` })));
+  const c = (i, fb) => (t.ansi ? t.ansi[i] : fb), base = termBase(t);
+  return el('span', { class: 'swatch', style: `background:${base.bg};border-color:${t.ansi ? c(8, '#444') : appTheme().line}` },
+    el('i', { style: `background:${base.fg};width:70%` }), el('i', { style: `background:${c(8, appTheme().dim)};width:55%` }),
+    el('b', {}, el('i', { style: `background:${c(2, appTheme().ok)};width:28%` }), el('i', { style: `background:${base.fg};width:34%` }), el('i', { style: `background:${c(3, appTheme().warn)};width:8%` })));
+}
+function uiSwatch(a) { // mini app window: header strip with the accent dot, body with text lines and an accent pill
+  return el('span', { class: 'ui-swatch', style: `background:${a.bg};border-color:${a.line}` },
+    el('span', { class: 'top', style: `background:${a.panel};border-bottom:1px solid ${a.line}` }, el('i', { style: `background:${a.acc}` }), el('i', { style: `background:${a.dim}` }), el('i', { style: `background:${a.dim}` })),
+    el('span', { class: 'body' }, el('i', { style: `background:${a.fg};width:72%` }), el('i', { style: `background:${a.dim};width:50%` }), el('i', { style: `background:${a.acc};width:30%;height:5px` })));
 }
 function closeLook() { $('#term-look')?.remove(); document.removeEventListener('mousedown', onDocDown, true); }
 function onDocDown(e) { const p = $('#term-look'); if (p && !p.contains(e.target) && !e.target.closest('.look-btn')) closeLook(); }
@@ -103,11 +140,15 @@ function openLook(anchor) {
   const pct = el('span', { class: 'look-unit', text: `${Math.round(LOOK.alpha * 100)}%` });
   const alpha = el('input', { type: 'range', min: '30', max: '100', step: '5', value: String(Math.round(LOOK.alpha * 100)), class: 'look-alpha', oninput: () => { LOOK.alpha = Number(alpha.value) / 100; pct.textContent = `${alpha.value}%`; applyLook(); } });
   const pop = el('div', { id: 'term-look', class: 'look-pop' },
-    el('div', { class: 'look-head' }, el('b', { text: '터미널 모양' }), el('button', { class: 'x', text: '×', onclick: closeLook })),
+    el('div', { class: 'look-head' }, el('b', { text: '모양' }), el('button', { class: 'x', text: '×', onclick: closeLook })),
+    el('div', { class: 'look-label', style: 'padding:0 12px 4px', text: '앱 테마' }),
+    el('div', { class: 'theme-list' }, ...APP_THEMES.map((a) => el('div', { class: 'theme-row' + (a.id === LOOK.app ? ' sel' : ''), 'data-app': a.id, onclick: () => { LOOK.app = a.id; applyLook(); } },
+      uiSwatch(a), el('span', { class: 'theme-name', text: a.name })))),
+    el('div', { class: 'look-label look-section', text: '터미널' }),
     el('div', { class: 'look-row' }, el('span', { class: 'look-label', text: 'Font' }), sel, size, el('span', { class: 'look-unit', text: 'px' })),
     custom,
     isMac ? el('div', { class: 'look-row', 'data-tip': '터미널 배경만 투명해지고 글자는 그대로입니다 · 뒤 창이 비쳐 보임' }, el('span', { class: 'look-label', text: '투명도' }), alpha, pct) : null,
-    el('div', { class: 'look-label look-themes-title', text: 'Themes' }),
+    el('div', { class: 'look-label', style: 'padding:8px 12px 4px', text: '터미널 테마' }),
     el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
       swatch(t), el('span', { class: 'theme-name', text: t.name })))));
   document.body.append(pop);
@@ -117,5 +158,6 @@ function openLook(anchor) {
   document.addEventListener('mousedown', onDocDown, true);
 }
 // the button each terminal bar carries
-const lookButton = () => el('button', { class: 'look-btn', text: '모양', 'data-tip': '터미널 테마 · 폰트', onclick: (e) => openLook(e.currentTarget) });
+const lookButton = () => el('button', { class: 'look-btn', text: '모양', 'data-tip': '앱 테마 · 터미널 테마 · 폰트', onclick: (e) => openLook(e.currentTarget) });
+$('#btn-look').onclick = (e) => openLook(e.currentTarget); // header entry point (no session needed)
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#term-look')) closeLook(); }, true);
