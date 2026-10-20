@@ -294,9 +294,9 @@ function renderDetail() {
   if (!s) { sec.replaceChildren(el('div', { class: 'empty', text: '「세션 ▾」에서 세션을 고르면 탭으로 열립니다' })); if (typeof syncBrowserPane === 'function') syncBrowserPane(null); return; }
   const head = buildHead(s);
   if (S.tab === 'shell') S.tab = 'terminal'; // the shell is a bottom panel now, not a sub-tab
-  const tabs = el('div', { class: 'tabs' }, ...[['terminal', '터미널'], ['transcript', '대화'], ['stats', '통계'], ['memory', '메모리']].map(([k, label]) =>
-    el('button', { class: k === S.tab ? 'active' : '', text: label, onclick: () => { S.tab = k; renderDetail(); } })),
-    el('button', { class: 'shell-toggle' + (S.shellOpen ? ' active' : ''), text: S.shellOpen ? '셸 ▾' : '셸 ▴', 'data-tip': `하단 셸 패널 ${S.shellOpen ? '숨기기' : '열기'} (⌃\`) · 세션 폴더의 zsh, 대화에는 기록되지 않음`, onclick: toggleShell }));
+  const tabs = el('div', { class: 'tabs' }, el('div', { class: 'seg' }, ...[['terminal', '터미널'], ['transcript', '대화'], ['stats', '통계'], ['memory', '메모리']].map(([k, label]) =>
+    el('button', { class: k === S.tab ? 'active' : '', text: label, onclick: () => { S.tab = k; renderDetail(); } }))),
+    shellToggleBtn());
   const pane = el('div', { class: 'pane' + (S.tab === 'terminal' ? ' term' : '') });
   sec.replaceChildren(el('div', { class: 'head-wrap' }, el('div', { class: 'head-strip' }, el('i')), head), tabs, pane); // head is an overlay: hidden until the strip is hovered, so the pane never reflows
   renderShellPanel();
@@ -451,11 +451,14 @@ async function openShell(s) {
   h.term.focus();
 }
 // Bottom panel (VS Code style): one shell per session tab, shown under whatever sub-tab is open; hiding keeps the pty.
+const svgIcon = (d) => { const w = document.createElement('span'); w.innerHTML = `<svg viewBox="0 0 24 24">${d}</svg>`; return w.firstChild; };
+const shellToggleBtn = () => el('button', { class: 'shell-toggle' + (S.shellOpen ? ' active' : ''), 'data-tip': `하단 셸 패널 ${S.shellOpen ? '숨기기' : '열기'} (⌃\`) · 세션 폴더의 zsh, 대화에는 기록되지 않음`, onclick: toggleShell },
+  svgIcon('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10l3 2-3 2M12.5 15H17"/>'), `셸 ${S.shellOpen ? '▾' : '▴'}`);
 const loadShellH = () => { try { return Math.max(120, Number(localStorage.getItem('shellH')) || 260); } catch { return 260; } };
 function toggleShell() {
   S.shellOpen = !S.shellOpen;
   try { localStorage.setItem('shellOpen', S.shellOpen ? '1' : ''); } catch { /* fine */ }
-  $('#session-detail .shell-toggle')?.replaceWith(el('button', { class: 'shell-toggle' + (S.shellOpen ? ' active' : ''), text: S.shellOpen ? '셸 ▾' : '셸 ▴', 'data-tip': `하단 셸 패널 ${S.shellOpen ? '숨기기' : '열기'} (⌃\`)`, onclick: toggleShell }));
+  $('#session-detail .shell-toggle')?.replaceWith(shellToggleBtn());
   renderShellPanel();
   if (!S.shellOpen) S.terms.get(S.sel)?.term.focus();
 }

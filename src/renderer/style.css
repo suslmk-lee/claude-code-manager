@@ -44,8 +44,8 @@ html.mac header :is(button, input, select, .menu, #tabs, .tab-arrow) { -webkit-a
 /* open-session tabs */
 #tabs { display:flex; gap:2px; overflow-x:auto; min-width:0; flex:1; scrollbar-width:none; }
 header .spacer { flex:0 0 8px; } /* the tab strip takes the free width, not half of it */
-.tab-arrow { flex:0 0 auto; padding:2px 6px; background:transparent; border-color:transparent; color:var(--dim); font-size:16px; line-height:1; }
-.tab-arrow:hover { color:var(--fg); border-color:var(--line); }
+.tab-arrow { flex:0 0 auto; padding:2px 6px; background:transparent; border-color:transparent; box-shadow:none; color:var(--dim); font-size:16px; line-height:1; }
+.tab-arrow:hover { color:var(--fg); border-color:var(--line); background:color-mix(in srgb, var(--fg) 6%, transparent); box-shadow:none; }
 .tab { user-select:none; } /* drag to reorder */
 .tab.dragging { opacity:.35; }
 .tab.drop-before { box-shadow:-3px 0 0 var(--acc); }
@@ -57,11 +57,17 @@ header .spacer { flex:0 0 8px; } /* the tab strip takes the free width, not half
 .tab .x { color:var(--dim); padding:0 2px; border-radius:4px; line-height:1; }
 .tab .x:hover { background:var(--sel); color:var(--fg); }
 .spacer { flex:1; }
-button { background:var(--raised); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; white-space:nowrap; }
-button:hover { border-color:var(--dim); }
-button.nav.active { background:var(--acc); color:var(--on-acc); border-color:var(--acc); }
+/* buttons: macOS push-button feel — soft top-lit gradient, hairline border, inner highlight, lift on hover, press on click */
+button { display:inline-flex; align-items:center; justify-content:center; gap:6px; color:var(--fg); border:1px solid color-mix(in srgb, var(--line) 80%, black 12%); border-radius:8px; padding:5px 12px; cursor:pointer; font:inherit; font-weight:500; white-space:nowrap; line-height:1.3;
+  background:linear-gradient(180deg, color-mix(in srgb, var(--raised) 90%, white 7%), var(--raised)); box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 1px 2px rgba(0,0,0,.28); transition:background .15s, box-shadow .15s, border-color .15s, transform .06s; }
+button:hover { background:linear-gradient(180deg, color-mix(in srgb, var(--raised) 80%, white 12%), color-mix(in srgb, var(--raised) 94%, white 4%)); border-color:color-mix(in srgb, var(--line) 60%, var(--dim)); box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 2px 6px rgba(0,0,0,.3); }
+button:active { transform:translateY(.5px); background:color-mix(in srgb, var(--raised) 88%, black 10%); box-shadow:inset 0 1px 3px rgba(0,0,0,.4); }
+button:focus-visible { outline:2px solid color-mix(in srgb, var(--acc) 60%, transparent); outline-offset:1px; }
+button svg { width:14px; height:14px; flex:none; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; opacity:.9; }
+button.nav.active, button.primary { color:var(--on-acc); border-color:color-mix(in srgb, var(--acc) 75%, black 15%); background:linear-gradient(180deg, color-mix(in srgb, var(--acc) 88%, white 10%), var(--acc)); box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 1px 3px color-mix(in srgb, var(--acc) 45%, transparent); }
+button.nav.active:hover, button.primary:hover { background:linear-gradient(180deg, color-mix(in srgb, var(--acc) 80%, white 16%), color-mix(in srgb, var(--acc) 95%, white 4%)); }
 button.danger { color:var(--bad); }
-button:disabled { opacity:.45; cursor:default; }
+button:disabled { opacity:.45; cursor:default; transform:none; box-shadow:none; }
 input, select, textarea { background:var(--field); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; width:100%; }
 main.view { flex:1; display:flex; min-height:0; }
 main.hidden { display:none; }
@@ -107,11 +113,15 @@ section { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hid
 .badge { padding:2px 7px; border-radius:10px; background:var(--raised); font-size:11px; color:var(--dim); }
 .badge.live { color:var(--ok); border:1px solid var(--ok); }
 .actions { margin-left:auto; display:flex; gap:6px; }
-.tabs { display:flex; gap:2px; padding:6px 14px 0; border-bottom:1px solid var(--line); }
-.tabs button { border-radius:6px 6px 0 0; border-bottom:none; }
-.tabs button.active { background:var(--bg); color:var(--acc); }
-.tabs .shell-toggle { margin-left:auto; border-radius:6px; border-bottom:1px solid var(--line); margin-bottom:4px; padding:3px 10px; font-size:12px; }
-.tabs .shell-toggle.active { color:var(--acc); border-color:var(--acc); }
+/* sub-tabs as a macOS segmented control; the shell toggle sits at the right */
+.tabs { display:flex; gap:8px; align-items:center; padding:7px 14px; border-bottom:1px solid var(--line); }
+.seg { display:inline-flex; gap:2px; padding:3px; border-radius:9px; background:color-mix(in srgb, var(--field) 70%, var(--bg)); border:1px solid color-mix(in srgb, var(--line) 70%, transparent); box-shadow:inset 0 1px 2px rgba(0,0,0,.25); }
+.seg button { border:none; border-radius:7px; background:transparent; box-shadow:none; color:var(--dim); padding:4px 12px; font-weight:500; }
+.seg button:hover { color:var(--fg); background:color-mix(in srgb, var(--fg) 6%, transparent); box-shadow:none; }
+.seg button:active { transform:none; }
+.seg button.active { color:var(--fg); background:linear-gradient(180deg, color-mix(in srgb, var(--raised) 85%, white 10%), var(--raised)); box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 1px 3px rgba(0,0,0,.35); }
+.tabs .shell-toggle { margin-left:auto; padding:4px 11px; font-size:12px; }
+.tabs .shell-toggle.active { color:var(--acc); }
 /* bottom shell panel (VS Code style): fixed height, drag the top edge to resize */
 .shell-panel { flex:0 0 auto; display:flex; flex-direction:column; min-height:120px; border-top:1px solid var(--line); background:var(--term-bg, var(--bg)); padding:0 6px 6px; position:relative; }
 .shell-grip { height:6px; margin:0 -6px 2px; cursor:ns-resize; background:transparent; }
@@ -122,7 +132,7 @@ body.resizing { cursor:ns-resize; user-select:none; }
 .pane.term { padding:6px; display:flex; flex-direction:column; background:var(--term-bg, var(--bg)); }
 .term-box { flex:1; min-height:0; }
 .term-bar { display:flex; gap:8px; align-items:center; padding:4px 6px; color:var(--dim); font-size:11px; }
-.term-bar .look-btn { margin-left:auto; padding:2px 8px; font-size:11px; }
+.term-bar .look-btn { margin-left:auto; padding:3px 9px; font-size:11px; }
 /* terminal look picker (theme gallery + font) */
 .look-pop { position:fixed; z-index:40; width:300px; max-height:min(78vh, 720px); display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 14px 36px rgba(0,0,0,.55); padding:10px 0 6px; font-size:12.5px; }
 .look-head { display:flex; align-items:center; justify-content:space-between; padding:0 12px 8px; }
@@ -331,7 +341,7 @@ svg.chart .bar:hover .hit { fill:var(--stripe); }
 .mem .proj { color:var(--acc); font-size:10px; font-family:ui-monospace, Menlo, Consolas, "Cascadia Mono", monospace; }
 .edit-pane { display:flex; flex-direction:column; }
 .md-edit { flex:1; min-height:0; resize:none; font:12.5px/1.55 ui-monospace, Menlo, Consolas, "Cascadia Mono", monospace; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; white-space:pre; overflow:auto; tab-size:2; }
-button.primary { background:var(--acc); border-color:var(--acc); color:var(--on-acc); }
+
 pre.md { white-space:pre-wrap; font:12px/1.5 ui-monospace, Menlo, Consolas, "Cascadia Mono", monospace; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
 .row { display:flex; gap:6px; align-items:center; }
 .row.right { justify-content:flex-end; }

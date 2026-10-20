@@ -158,6 +158,6 @@ function openLook(anchor) {
   document.addEventListener('mousedown', onDocDown, true);
 }
 // the button each terminal bar carries
-const lookButton = () => el('button', { class: 'look-btn', text: '모양', 'data-tip': '앱 테마 · 터미널 테마 · 폰트', onclick: (e) => openLook(e.currentTarget) });
+const lookButton = () => { const b = el('button', { class: 'look-btn', 'data-tip': '앱 테마 · 터미널 테마 · 폰트', onclick: (e) => openLook(e.currentTarget) }); b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.7 1.8-1.5 0-.9-.8-1.3-.8-2.2 0-.9.8-1.6 1.8-1.6h1.6a4 4 0 0 0 4.1-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>모양'; return b; };
 $('#btn-look').onclick = (e) => openLook(e.currentTarget); // header entry point (no session needed)
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#term-look')) closeLook(); }, true);
