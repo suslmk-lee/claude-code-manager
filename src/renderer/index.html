@@ -25,11 +25,17 @@
       <button class="profile" id="btn-profile"><span class="avatar">?</span><span class="profile-text">계정…</span><span class="chev">⌄</span></button>
       <div class="flyout profile-pop" id="profile-pop"></div>
     </div>
-    <button class="nav" id="btn-look" data-tip="앱 테마 · 터미널 색상/폰트/투명도"><svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.7 1.8-1.5 0-.9-.8-1.3-.8-2.2 0-.9.8-1.6 1.8-1.6h1.6a4 4 0 0 0 4.1-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>모양</button>
-    <button class="nav" id="btn-stats"><svg viewBox="0 0 24 24"><path d="M5 19.5V12M12 19.5V5M19 19.5v-9"/></svg>통계</button>
-    <button class="nav" id="btn-memory"><svg viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M8 9.5h8M8 13h8M8 16.5h5"/></svg>메모리</button>
-    <button id="btn-new"><svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg>새 세션</button>
-    <button id="btn-refresh" data-tip="새로고침"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5V9H15"/></svg></button>
+    <button id="btn-new" class="icon" data-tip="새 세션 (⌘N)"><svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+    <div class="menu" id="gear-menu">
+      <button id="btn-gear" class="icon" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <div class="flyout gear-pop">
+        <button class="nav" id="btn-stats"><svg viewBox="0 0 24 24"><path d="M5 19.5V12M12 19.5V5M19 19.5v-9"/></svg>통계</button>
+        <button class="nav" id="btn-memory"><svg viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M8 9.5h8M8 13h8M8 16.5h5"/></svg>메모리</button>
+        <div class="sep"></div>
+        <button id="btn-look"><svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.7 1.8-1.5 0-.9-.8-1.3-.8-2.2 0-.9.8-1.6 1.8-1.6h1.6a4 4 0 0 0 4.1-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>모양 · 테마 / 폰트 / 투명도</button>
+        <button id="btn-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5V9H15"/></svg>새로고침</button>
+      </div>
+    </div>
   </header>
 
   <main id="view-sessions" class="view">

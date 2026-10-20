@@ -838,6 +838,10 @@ document.addEventListener('keydown', (e) => {
 api.onSessionsChanged(loadSessions);
 api.onMemoryChanged(() => { S.memory = null; if (S.view === 'memory') loadMemory(); });
 $('#btn-refresh').onclick = () => { S.memory = null; loadSessions(); if (S.view === 'memory') loadMemory(); };
+const gearMenu = $('#gear-menu'); // hover menu like 세션 ▾: a click on an item shuts it until the pointer leaves
+gearMenu.querySelector('.gear-pop').addEventListener('click', (e) => { if (e.target.closest('button')) { gearMenu.classList.remove('open'); gearMenu.classList.add('closed'); } });
+gearMenu.onmouseleave = () => gearMenu.classList.remove('closed', 'open');
+$('#btn-gear').onclick = () => { gearMenu.classList.remove('closed'); gearMenu.classList.toggle('open'); };
 
 // ---------- boot ----------
 const q = new URLSearchParams(location.hash.slice(1)); // dev aid: #tab=stats&sel=<short id>&view=memory
