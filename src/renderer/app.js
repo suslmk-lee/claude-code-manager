@@ -729,7 +729,8 @@ function showCtx(e, s) {
     bg ? item('재시작 (respawn)', () => act('respawn', s)) : null,
     el('div', { class: 'sep' }),
     S.tabs.includes(s.sessionId) ? item('탭 닫기', () => closeTab(s.sessionId)) : null,
-    s.local || (s.live && !bg) ? null : item('삭제…', () => deleteFlow(s), 'danger'),
+    s.local || (s.live && !bg) ? null : item(bg ? '세션 삭제… (대화 기록은 유지)' : '트랜스크립트 삭제…', () => deleteFlow(s), 'danger'),
+    bg && s.file && !s.local ? item('완전 삭제… (세션 + 대화 기록)', () => deleteFlow(s, { purge: true }), 'danger') : null,
   ];
   ctx.replaceChildren(...items.filter(Boolean));
   ctx.classList.remove('hidden');
@@ -765,12 +766,14 @@ function renameFlow(s) {
   dlgRename.showModal();
   $('#rename-name').select();
 }
-async function deleteFlow(s) {
+async function deleteFlow(s, { purge = false } = {}) {
   if (s.kind === 'background') {
-    if (!confirm(`"${s.name}" 백그라운드 세션을 삭제할까요?${s.live ? ' (실행 중이라 먼저 중지합니다)' : ''}\n트랜스크립트는 남습니다.`)) return;
+    const what = purge ? '세션과 대화 기록(트랜스크립트)을 모두 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.' : '백그라운드 세션을 삭제할까요?\n대화 기록(트랜스크립트)은 남아 「트랜스크립트만」 그룹에서 다시 이어갈 수 있습니다.';
+    if (!confirm(`"${s.name}" ${s.live ? '(실행 중이라 먼저 중지합니다) ' : ''}${what}`)) return;
     if (s.live) await api.agentAction('stop', s.short, s.profile);
     const r = await api.agentAction('rm', s.short, s.profile);
-    if (!r.ok) alert(r.output || 'rm 실패');
+    if (!r.ok) { alert(r.output || 'rm 실패'); return; }
+    if (purge && s.file) await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));
   } else {
     if (!confirm(`"${s.name}" 의 트랜스크립트(${fmtBytes(s.size)})를 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.`)) return;
     await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));
