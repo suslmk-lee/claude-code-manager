@@ -411,12 +411,22 @@ async function startLogMode(s, t) {
   if (r) { if (r.from > 0) t.term.write(`\x1b[90m… 이전 ${fmtN(r.from)}턴은 대화 탭에서\x1b[0m\r\n`); for (const x of r.turns) t.term.write(turnToAnsi(x, t.term.cols)); }
   api.watchTranscript(s.sessionId);
 }
+// An xterm box that leaves the DOM (tab switch, panel hide) comes back with its viewport scrollTop reset to 0 while
+// xterm still believes it sits at its old line: the next wheel notch then jumps by that whole gap and the bottom
+// becomes unreachable. Moving one line away and back makes xterm's Viewport rewrite scrollTop from its own state.
+function resyncViewport(term) {
+  const b = term.buffer.active;
+  if (b.type !== 'normal' || b.baseY === 0) return;
+  const y = b.viewportY;
+  term.scrollLines(y > 0 ? -1 : 1);
+  term.scrollToLine(y);
+}
 function showTerminal(s, pane) {
   let t = S.terms.get(s.sessionId);
   if (!t) { t = createTerm(s); S.terms.set(s.sessionId, t); }
   pane.append(t.bar, t.box);
   requestAnimationFrame(() => {
-    t.fit.fit(); t.term.focus();
+    t.fit.fit(); resyncViewport(t.term); t.term.focus();
     if (t.ptyId) return;
     if (!attachArgs(s) && (s.live || (typeof CH !== 'undefined' && CH.has(s.sessionId)))) { if (!t.logMode) startLogMode(s, t); else api.watchTranscript(s.sessionId); }
     else if (s.local || s.live) attach(s);
@@ -501,7 +511,7 @@ function renderShellPanel() {
   };
   panel.append(grip, h.bar, h.box);
   sec.append(panel);
-  requestAnimationFrame(() => { h.fit.fit(); h.term.focus(); if (!h.ptyId && !h.exited) openShell(s); }); // an exited shell stays as it was until "다시 열기"
+  requestAnimationFrame(() => { h.fit.fit(); resyncViewport(h.term); h.term.focus(); if (!h.ptyId && !h.exited) openShell(s); }); // an exited shell stays as it was until "다시 열기"
 }
 function fitCurrent() { for (const t of [S.terms.get(S.sel), S.shells.get(S.sel)]) if (t?.box.isConnected) requestAnimationFrame(() => t.fit.fit()); }
 api.onPtyData(({ id, data }) => { for (const t of [...S.terms.values(), ...S.shells.values()]) if (t.ptyId === id) t.term.write(data); });
