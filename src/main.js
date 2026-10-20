@@ -44,7 +44,8 @@ function createWindow() {
 // ---- read APIs ----
 ipcMain.handle('sessions:list', () => data.listSessions());
 ipcMain.handle('session:stats', (_e, id) => data.sessionStats(id));
-ipcMain.handle('stats:global', () => data.globalStats());
+ipcMain.handle('stats:global', (_e, opts) => data.globalStats(opts || {}));
+ipcMain.handle('profiles:list', () => data.profiles());
 ipcMain.handle('transcript:read', (_e, { sessionId, opts }) => data.transcript(sessionId, opts));
 ipcMain.handle('transcript:search', (_e, q) => data.searchTranscripts(q));
 ipcMain.handle('projects:list', () => data.listProjects());
@@ -56,8 +57,8 @@ ipcMain.handle('memory:delete', (_e, file) => data.deleteMemory(file));
 ipcMain.handle('memory:create', (_e, req) => data.createMemory(req));
 
 // ---- lifecycle via CLI ----
-ipcMain.handle('agent:action', (_e, { action, id }) => data.agentAction(action, id));
-ipcMain.handle('pins:set', (_e, { id, on }) => data.setPinned(id, on));
+ipcMain.handle('agent:action', (_e, { action, id, profile }) => data.agentAction(action, id, profile));
+ipcMain.handle('pins:set', (_e, { id, on, profile }) => data.setPinned(id, on, profile));
 ipcMain.handle('cli:version', () => data.cliVersion());
 ipcMain.handle('usage:get', () => data.usage());
 ipcMain.handle('account:get', () => data.account());
@@ -136,15 +137,16 @@ ipcMain.handle('source:open', (_e, { cwd, loc }) => new Promise((resolve) => {
 // One `claude attach` client per background session, shared by the terminal tab and by chat-tab sends.
 const attachPtys = new Map(); // session short id → ptyId
 const ptyLast = new Map();    // ptyId → { at, sawPrompt }
-function openPty(args, cwd, cols, rows, shell = false) {
+function openPty(args, cwd, cols, rows, shell = false, profile) {
   const id = nextPty++;
-  let exe = data.findClaude();
+  const L = data.launcher(profile, { launch: true }); // the session's profile: its config dir (and launcher) — a shell inherits it too
+  let exe = L.bin;
   if (shell) { [exe, args] = isWin ? [process.env.ComSpec || 'cmd.exe', []] : [process.env.SHELL || '/bin/zsh', ['-l']]; } // the user's own shell, login so PATH/aliases load
   else if (isWin && /\.(cmd|bat)$/i.test(exe)) { args = ['/c', exe, ...args]; exe = process.env.ComSpec || 'cmd.exe'; } // ConPTY can't launch scripts directly
   const p = pty.spawn(exe, args, {
     name: 'xterm-256color', cols: cols || 120, rows: rows || 40,
     cwd: cwd && fs.existsSync(cwd) ? cwd : app.getPath('home'),
-    env: { ...data.env(), TERM: 'xterm-256color', COLORTERM: 'truecolor', LANG: process.env.LANG || 'en_US.UTF-8' },
+    env: { ...L.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', LANG: process.env.LANG || 'en_US.UTF-8' },
   });
   ptys.set(id, p);
   ptyLast.set(id, { at: Date.now(), sawPrompt: false });
@@ -153,23 +155,23 @@ function openPty(args, cwd, cols, rows, shell = false) {
   p.onExit(({ exitCode }) => { ptys.delete(id); ptyLast.delete(id); for (const [k, v] of attachPtys) if (v === id) attachPtys.delete(k); send('pty:exit', { id, code: exitCode }); });
   return id;
 }
-ipcMain.handle('pty:open', (_e, { args = [], cwd, cols, rows, shell }) => {
-  if (shell) return openPty([], cwd, cols, rows, true); // plain shell in the session's folder (the 셸 sub-tab)
+ipcMain.handle('pty:open', (_e, { args = [], cwd, cols, rows, shell, profile }) => {
+  if (shell) return openPty([], cwd, cols, rows, true, profile); // plain shell in the session's folder (the 셸 panel)
   const existing = args[0] === 'attach' && attachPtys.get(args[1]);
   if (existing && ptys.has(existing)) { // the chat tab already attached: reuse, nudge the TUI to repaint at this size
     const p = ptys.get(existing);
     try { p.resize(Math.max(20, (cols || 120) - 1), rows || 40); setTimeout(() => { try { p.resize(cols || 120, rows || 40); } catch { /* gone */ } }, 60); } catch { /* gone */ }
     return existing;
   }
-  return openPty(args, cwd, cols, rows);
+  return openPty(args, cwd, cols, rows, false, profile);
 });
 // Type a message into a running background session through its attach client (hidden one if the terminal tab is closed).
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-ipcMain.handle('pty:sendToSession', async (_e, { short, cwd, text }) => {
+ipcMain.handle('pty:sendToSession', async (_e, { short, cwd, text, profile }) => {
   if (!/^[0-9a-f]{8}$/.test(short)) throw new Error('bad id');
   let id = attachPtys.get(short);
   if (!id || !ptys.has(id)) {
-    id = openPty(['attach', short], cwd, 140, 40);
+    id = openPty(['attach', short], cwd, 140, 40, false, profile);
     const t0 = Date.now(); // ponytail: ready = prompt glyph seen and 600ms of quiet (max 10s)
     while (Date.now() - t0 < 10000) { const m = ptyLast.get(id); if (!m) throw new Error('attach exited'); if (m.sawPrompt && Date.now() - m.at > 600) break; await sleep(150); }
   }

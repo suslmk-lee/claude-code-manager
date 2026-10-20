@@ -28,7 +28,7 @@ const cost = (b, p) => p ? (b.input * p.input + b.cacheRead * p.cacheRead + b.ca
 const fmtUsd = (v) => v == null ? '-' : '$' + (v >= 100 ? v.toFixed(0) : v.toFixed(2));
 const costOf = (byModel, prices) => Object.entries(byModel).reduce((acc, [m, b]) => { const c = cost(b, priceFor(prices, m)); return c == null ? acc : (acc || 0) + c; }, null);
 
-const ST = { range: 30, metric: 'output', data: null };
+const ST = { range: 30, metric: 'output', data: null, profile: '' }; // profile: '' = all
 const METRICS = { output: ['출력 토큰', (b) => b.output], total: ['총 토큰', (b) => b.input + b.cacheRead + b.cacheCreate + b.output], msgs: ['응답 수', (b) => b.msgs], tools: ['도구 호출', (b) => b.tools] };
 const PALETTE = ['var(--acc)', '#5b9cf6', '#4caf7d', '#e0b341', '#bd93f9', '#2aa198', '#e05d5d', '#f0a07a', '#8a919e'];
 const totalOf = (b) => (b.input || 0) + (b.cacheRead || 0) + (b.cacheCreate || 0) + (b.output || 0);
@@ -70,7 +70,7 @@ function kpi(label, value, fmt, { spark, color = 'var(--acc)', delta, sub, i = 0
 async function loadStats() {
   const pane = $('#stats-detail');
   if (!ST.data) pane.replaceChildren(el('div', { class: 'empty', text: '전체 세션 집계 중…' }));
-  ST.data = await api.globalStats();
+  ST.data = await api.globalStats(ST.profile ? { profile: ST.profile } : {});
   renderStats();
 }
 
@@ -204,6 +204,7 @@ function renderStats() {
       el('h3', { text: '전체 통계' }),
       el('span', { class: 'msg', text: `${g.firstTs?.slice(0, 10) || ''} → ${g.lastTs?.slice(0, 10) || ''} · 트랜스크립트가 있는 세션 ${fmtN(g.sessions)}개` }),
       el('span', { class: 'spacer' }),
+      S.profiles.length > 1 ? seg([['', '모든 프로파일'], ...S.profiles.map((p) => [p.id, p.id === 'default' ? 'Claude' : p.name])], ST.profile, (v) => { ST.profile = v; ST.data = null; loadStats(); }) : null,
       seg([[7, '7일'], [30, '30일'], [90, '90일'], [0, '전체']], ST.range, (v) => { ST.range = Number(v); renderStats(); }),
       el('button', { text: '↻ 다시 집계', onclick: () => { ST.data = null; loadStats(); } })),
     el('div', { class: 'kpis' },

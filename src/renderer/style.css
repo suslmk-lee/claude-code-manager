@@ -54,6 +54,7 @@ header .spacer { flex:0 0 8px; } /* the tab strip takes the free width, not half
 .tab:hover { color:var(--fg); }
 .tab.active { background:var(--bg); color:var(--fg); border-color:var(--acc); }
 .tab .label { overflow:hidden; text-overflow:ellipsis; }
+.pbadge { display:inline-block; font-size:10px; font-weight:600; line-height:1.4; padding:0 5px; margin-left:6px; border-radius:6px; background:color-mix(in srgb, var(--warn) 22%, var(--panel)); color:var(--warn); vertical-align:1px; white-space:nowrap; } /* session from another profile (config dir) */
 .tab .x { color:var(--dim); padding:0 2px; border-radius:4px; line-height:1; }
 .tab .x:hover { background:var(--sel); color:var(--fg); }
 .spacer { flex:1; }

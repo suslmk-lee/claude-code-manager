@@ -97,7 +97,7 @@ async function sendChat(st, text, images = []) {
   const payload = images.map(({ type, data }) => ({ type, data })); // base64 only over IPC
   try {
     if (!st.started) {
-      const req = s.chatNew ? { key: st.key, cwd: s.cwd, text, images: payload, ...s.startOpts } : { key: st.key, cwd: s.cwd, text, images: payload, resume: s.sessionId };
+      const req = s.chatNew ? { key: st.key, cwd: s.cwd, text, images: payload, ...s.startOpts } : { key: st.key, cwd: s.cwd, text, images: payload, resume: s.sessionId, profile: s.profile };
       await api.chatStart(req); st.started = true;
       if (st.ui) st.ui.ta.placeholder = '메시지 (Enter 전송 · Shift+Enter 줄바꿈)';
     }
@@ -317,7 +317,7 @@ function renderTerminalComposer(s, pane) {
     }
     ta.value = ''; ta.style.height = ''; status.textContent = '전송 중…';
     pane.scrollTop = pane.scrollHeight;
-    try { await api.ptySendToSession(s.short, s.cwd, text); status.textContent = '터미널 세션으로 전송됨 · 응답은 아래에 실시간으로'; pane.scrollTop = pane.scrollHeight; }
+    try { await api.ptySendToSession(s.short, s.cwd, text, s.profile); status.textContent = '터미널 세션으로 전송됨 · 응답은 아래에 실시간으로'; pane.scrollTop = pane.scrollHeight; }
     catch (e) { status.textContent = '전송 실패: ' + e.message; }
   };
   ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
@@ -340,7 +340,7 @@ async function handoffToTerminal(st) {
   await closed; // --bg --resume must not see a second process on this transcript, or it starts a copy
   // a session that already has a daemon job record keeps its saved options: any flag would make the daemon start a copy
   const name = s.job || /^[0-9a-f]{8}$/.test(s.name) ? '' : s.name;
-  const r = await api.resumeBg({ sessionId, cwd: s.cwd, name }).catch((e) => ({ ok: false, output: e.message }));
+  const r = await api.resumeBg({ sessionId, cwd: s.cwd, name, profile: s.profile }).catch((e) => ({ ok: false, output: e.message }));
   if (!r.ok && r.untrusted) { // the daemon refuses untrusted folders: open the session in a local terminal instead (the trust prompt shows there)
     await until(async () => { await loadSessions(); return !S.sessions.find((v) => v.sessionId === sessionId)?.live; });
     TR.delete(sessionId); S.tab = 'terminal'; openSession(sessionId);
@@ -356,7 +356,7 @@ async function handoffToTerminal(st) {
 }
 async function takeOverFromTerminal(s) {
   if (!confirm(`"${s.name}" 백그라운드 세션을 중지하고 여기서 챗으로 이어갈까요?`)) return;
-  const r = await api.agentAction('stop', s.short);
+  const r = await api.agentAction('stop', s.short, s.profile);
   if (!r.ok) { alert(r.output || 'stop 실패'); return; }
   await until(async () => { await loadSessions(); return !S.sessions.find((v) => v.sessionId === s.sessionId)?.live; });
   TR.delete(s.sessionId); S.tab = 'transcript'; renderDetail();
@@ -368,8 +368,8 @@ function chatOnTabClose(sessionId) { const st = CH.get(sessionId); if (st) { api
 // 새 세션 창 → 챗: a placeholder tab; the first message creates the session (title = name) and init swaps in the real id.
 function newChatTab({ cwd, name, prompt, opts = {} }) {
   const tmp = 'chat-' + Date.now();
-  const s = { sessionId: tmp, chatNew: true, local: true, kind: 'chat', name: name || `${baseName(cwd)} (챗)`, cwd, projectDir: cwd.replace(/[^A-Za-z0-9]/g, '-'),
-    startOpts: { model: opts.model, effort: opts.effort, permissionMode: opts.permissionMode, agent: opts.agent, title: name || undefined } };
+  const s = { sessionId: tmp, chatNew: true, local: true, kind: 'chat', name: name || `${baseName(cwd)} (챗)`, cwd, projectDir: cwd.replace(/[^A-Za-z0-9]/g, '-'), profile: opts.profile || 'default',
+    startOpts: { model: opts.model, effort: opts.effort, permissionMode: opts.permissionMode, agent: opts.agent, title: name || undefined, profile: opts.profile || undefined } };
   S.local.push(s); S.tab = 'transcript';
   openSession(tmp);
   if (prompt) sendChat(chatState(s), prompt);

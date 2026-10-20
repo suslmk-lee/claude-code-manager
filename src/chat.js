@@ -39,15 +39,16 @@ const userMsg = (text, images = []) => ({
 const must = (key) => { const s = sessions.get(key); if (!s) throw new Error('no such chat'); return s; };
 
 // emit(msg) receives every SDK message as-is plus ours: permission_request, permission_cancelled, stderr, error, closed.
-function start({ key, cwd, text, images, resume, model, effort, permissionMode, title, agent }, emit) {
+function start({ key, cwd, text, images, resume, model, effort, permissionMode, title, agent, profile }, emit) {
   if (sessions.has(key)) throw new Error('already running');
+  const L = data.launcher(profile, { launch: true }); // profile = config dir (+ its launcher): the SDK spawns that binary with that env
   const input = queue(), abort = new AbortController();
   const s = { key, cwd, input, abort, pending: new Map(), sessionId: resume || null, busy: true };
   sessions.set(key, s);
   s.q = query({ prompt: input, options: {
     cwd, resume: resume || undefined, model: model || undefined, effort: effort || undefined, permissionMode: permissionMode || undefined, title: title || undefined, agent: agent || undefined,
     includePartialMessages: true, abortController: abort,
-    pathToClaudeCodeExecutable: data.findClaude(), env: data.env(), // the terminal's binary and PATH, even when launched from Finder
+    pathToClaudeCodeExecutable: L.bin, env: L.env, // the terminal's binary and PATH, even when launched from Finder
     canUseTool: (tool, inp, opts) => new Promise((resolve) => {
       const id = nextReq++;
       s.pending.set(id, resolve);

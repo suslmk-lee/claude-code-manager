@@ -34,7 +34,7 @@ const shortPath = (p = '') => {
 
 const S = {
   view: 'sessions', sessions: [], local: [], sel: null, tab: 'terminal', tabs: [], booted: false, unseen: new Set(),
-  terms: new Map(), shells: new Map(), shellOpen: (() => { try { return localStorage.getItem('shellOpen') === '1'; } catch { return false; } })(), memory: null, projects: [], memSel: null, memFilter: '', memProject: '',
+  profiles: [], terms: new Map(), shells: new Map(), shellOpen: (() => { try { return localStorage.getItem('shellOpen') === '1'; } catch { return false; } })(), memory: null, projects: [], memSel: null, memFilter: '', memProject: '',
 };
 const cur = () => S.sessions.find((s) => s.sessionId === S.sel) || S.local.find((s) => s.sessionId === S.sel);
 
@@ -58,7 +58,7 @@ const closeFlyout = () => { menu.classList.remove('open'); menu.classList.add('c
 
 // ---------- sessions ----------
 async function loadSessions() {
-  [S.sessions, S.cliVersion] = await Promise.all([api.listSessions(), api.cliVersion()]);
+  [S.sessions, S.cliVersion, S.profiles] = await Promise.all([api.listSessions(), api.cliVersion(), api.listProfiles().catch(() => S.profiles)]);
   renderVersionBar();
   if (!S.booted) { // tabs from the last run come back; only a first run (nothing saved) opens every running session
     S.booted = true;
@@ -153,6 +153,7 @@ function renderTabs() {
       ondragend: () => { S.dragTab = null; renderTabs(); } },
       el('span', { class: 'glyph ' + st, text: s.live || s.local ? '✱' : '•' }),
       el('span', { class: 'label', text: s.name }),
+      profileBadge(s),
       S.unseen.has(s.sessionId) ? el('span', { class: 'pill', text: '입력' }) : null,
       el('span', { class: 'x', text: '×', 'data-tip': '탭 닫기 (세션은 계속 실행)', onclick: (e) => { e.stopPropagation(); closeTab(s.sessionId); } }));
     return t;
@@ -214,7 +215,7 @@ function renderSessionList() {
     : (s.state === 'working' || s.status === 'busy') ? 'working' : s.job ? 'done' : 'other';
   const by = {};
   const q = (S.sessFilter || '').toLowerCase();
-  const match = (s) => !q || `${s.name} ${s.cwd} ${s.state || ''} ${s.status || ''} ${s.job?.needs || s.job?.detail || ''}`.toLowerCase().includes(q);
+  const match = (s) => !q || `${s.name} ${s.cwd} ${s.profile || ''} ${s.state || ''} ${s.status || ''} ${s.job?.needs || s.job?.detail || ''}`.toLowerCase().includes(q);
   for (const s of S.sessions) if (match(s)) (by[bucket(s)] ||= []).push(s);
   group('핀', by.pinned || []);
   group('입력 대기', by.needs || []);
@@ -228,11 +229,12 @@ function linksLabel(job) {
   const pr = n > 1 ? `${n} PRs` : n === 1 ? (job.prs[0].href?.includes('/merge_requests/') ? '!' : '#') + job.prs[0].id : '';
   return [pr, job.frames ? '⧉' + (job.frames > 1 ? job.frames : '') : ''].filter(Boolean).join(' ');
 }
+const profileBadge = (s) => (s.profile && s.profile !== 'default' ? el('span', { class: 'pbadge', text: s.profile, 'data-tip': `프로파일 ${s.profile} (${(S.profiles.find((p) => p.id === s.profile) || {}).dir || ''})` }) : null);
 function sessionRow(s) {
   const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
   const detail = s.job?.needs || s.job?.detail || s.lastPrompt || s.job?.intent || '';
   return el('div', { class: 'sess' + (s.sessionId === S.sel ? ' sel' : ''), 'data-tip': `${shortPath(s.cwd)}\n${detail}`, onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s) },
-    el('span', { class: 'name' }, el('span', { class: 'glyph ' + st, text: s.live ? '✱' : '•' }), s.name),
+    el('span', { class: 'name' }, el('span', { class: 'glyph ' + st, text: s.live ? '✱' : '•' }), s.name, profileBadge(s)),
     el('span', { class: 'detail', text: detail }),
     el('span', { class: 'links', text: linksLabel(s.job) }),
     el('span', { class: 'age', text: fmtAgo(s.lastActivity) }));
@@ -254,13 +256,13 @@ function statusLine(s) {
     el('span', { class: 'sl-model', text: modelLabel(s.lastModel) || '모델 ?' }), sep(),
     el('span', { class: 'sl-branch', text: s.gitBranch && s.gitBranch !== 'HEAD' ? s.gitBranch : '…' }), sep(),
     s.lastContext ? el('span', { class: 'sl-ctx' + (ctxPct > 0.8 ? ' warn' : ''), 'data-tip': '현재 대화의 컨텍스트 크기 (마지막 응답의 입력 토큰) / 모델 컨텍스트 한도', text: `${fmtTok(s.lastContext)}/${fmtTok(win)}` }) : el('span', { class: 'sl-ctx', text: '컨텍스트 ?' }), sep(),
-    el('span', { class: 'sl-usage', text: '5h · 7d …' }),
+    s.profile && s.profile !== 'default' ? el('span', { class: 'sl-usage', text: `프로파일 ${s.profile}`, 'data-tip': '이 세션은 별도 설정 폴더(프로파일)에서 실행됩니다 · 계정 사용량은 기본 프로파일만' }) : el('span', { class: 'sl-usage', text: '5h · 7d …' }),
     s.permissionMode ? [sep(), el('span', { class: 'sl-mode' + (s.permissionMode === 'auto' ? ' auto' : ''), text: `${s.permissionMode} mode` })] : null,
     pr?.url ? [sep(), el('a', { class: 'sl-pr', href: pr.url, target: '_blank', 'data-tip': pr.url, text: `${/merge_requests/.test(pr.url) ? 'MR !' : 'PR #'}${pr.number}` })] : null,
     (s.job?.prs?.length || 0) > 1 ? el('span', { class: 'msg', text: ` (+${s.job.prs.length - 1})` }) : null,
   ].flat().filter((x) => x != null));
   api.gitInfo(s.workCwd || s.cwd).then((g) => { const b = line.querySelector('.sl-branch'); if (!b) return; if (g) { b.textContent = g.branch + (g.dirty ? '*' : ''); b.classList.toggle('dirty', g.dirty); } else if (b.textContent === '…') b.textContent = s.gitBranch && s.gitBranch !== 'HEAD' ? s.gitBranch : 'no git'; });
-  getUsage().then((u) => { const e = line.querySelector('.sl-usage'); if (!e) return; if (!u) { e.textContent = '사용량 캐시 없음'; return; }
+  if (!s.profile || s.profile === 'default') getUsage().then((u) => { const e = line.querySelector('.sl-usage'); if (!e) return; if (!u) { e.textContent = '사용량 캐시 없음'; return; }
     e.replaceChildren(
       el('span', { 'data-tip': `5시간 창 사용률 · ${fmtUntil(u.fiveHour.resetsAt) || '곧'} 뒤 초기화` }, '5h ', el('b', { class: u.fiveHour.pct >= 80 ? 'warn' : '', text: `${u.fiveHour.pct}%` }), ` (${fmtUntil(u.fiveHour.resetsAt)})`),
       ' | ',
@@ -276,10 +278,10 @@ function buildHead(s) {
   } else if (s.kind === 'background') {
     actions.push(el('button', { text: '재시작', onclick: () => act('respawn', s) }), el('button', { class: 'danger', text: '삭제', onclick: () => confirm(`"${s.name}" 백그라운드 세션을 삭제할까요? (트랜스크립트는 남습니다)`) && act('rm', s) }));
   }
-  if (s.job) actions.unshift(el('button', { text: s.pinned ? '★ 핀 해제' : '☆ 핀', onclick: () => api.setPinned(s.short, !s.pinned).then(loadSessions) }));
+  if (s.job) actions.unshift(el('button', { text: s.pinned ? '★ 핀 해제' : '☆ 핀', onclick: () => api.setPinned(s.short, !s.pinned, s.profile).then(loadSessions) }));
   if (!s.local || s.chatNew) actions.unshift(el('button', { class: typeof BR !== 'undefined' && BR.get(s.sessionId)?.open ? 'toggled' : '', text: '브라우저', 'data-tip': '오른쪽에 브라우저 패널 (요소 선택 → Claude에 전달)', onclick: () => { toggleBrowser(s); renderDetail(); } }));
   return el('div', { class: 'detail-head', id: 'detail-head' },
-    el('h2', { text: s.name }),
+    el('h2', {}, s.name, profileBadge(s)),
     el('span', { class: 'path', text: `${shortPath(s.cwd)}  ·  ${s.sessionId}` }),
     el('span', { class: 'badge' + (s.live ? ' live' : ''), text: (typeof CH !== 'undefined' && CH.has(s.sessionId)) ? `live · 챗 (SDK) · ${s.status || ''}` : s.live ? `live · ${s.kind} · ${s.status || ''} ${s.state || ''}` : (s.kind || 'transcript') }),
     s.version ? el('span', { class: 'badge' + (S.cliVersion && s.version !== S.cliVersion ? ' warn' : ''), text: `v${s.version}`, 'data-tip': S.cliVersion && s.version !== S.cliVersion ? `설치된 Claude Code는 v${S.cliVersion} · 세션 ▾ 에서 재시작` : '이 세션이 실행 중인 Claude Code 버전' }) : null,
@@ -307,7 +309,7 @@ function renderDetail() {
   else showSessionMemory(s, pane);
 }
 async function act(action, s) {
-  const r = await api.agentAction(action, s.short);
+  const r = await api.agentAction(action, s.short, s.profile);
   if (!r.ok) alert(r.output || `${action} 실패`);
   await loadSessions();
 }
@@ -410,7 +412,7 @@ async function attach(s) {
   if (t.logMode) { t.logMode = false; t.btn.style.display = ''; t.term.reset(); }
   t.fit.fit();
   t.btn.disabled = true; // until the pty is up, so a double click cannot spawn two clients
-  t.ptyId = await api.ptyOpen({ args, cwd: s.cwd, cols: t.term.cols, rows: t.term.rows });
+  t.ptyId = await api.ptyOpen({ args, cwd: s.cwd, cols: t.term.cols, rows: t.term.rows, profile: s.profile });
   t.btn.disabled = false;
   t.setLabel();
   t.status.textContent = 'claude ' + args.join(' ');
@@ -444,7 +446,7 @@ async function openShell(s) {
   if (h.exited) { h.exited = false; h.term.reset(); h.atWorktree = false; const b = h.bar.querySelector('button:nth-child(3)'); if (b && /cd$/.test(b.textContent)) b.textContent = '워크트리로 cd'; }
   h.fit.fit();
   h.btn.disabled = true;
-  h.ptyId = await api.ptyOpen({ shell: true, cwd: shellCwd(s), cols: h.term.cols, rows: h.term.rows });
+  h.ptyId = await api.ptyOpen({ shell: true, cwd: shellCwd(s), cols: h.term.cols, rows: h.term.rows, profile: s.profile });
   h.btn.disabled = false;
   h.setLabel();
   h.status.textContent = `셸 · ${shortPath(shellCwd(s))} · 이 세션의 대화에는 기록되지 않습니다`;
@@ -521,12 +523,13 @@ async function showStats(s, pane) {
 }
 
 // ---------- memory ----------
+const pkey = (p) => `${p.profile || 'default'}|${p.dir}`, unpkey = (k) => { const i = k.indexOf('|'); return { profile: k.slice(0, i), dir: k.slice(i + 1) }; }; // a project = (profile, encoded dir)
 async function ensureMemory() {
   if (S.memory) return;
   [S.memory, S.projects] = await Promise.all([api.listMemory(), api.listProjects()]);
   const sel = $('#mem-project');
   sel.replaceChildren(el('option', { value: '', text: '모든 프로젝트' }),
-    ...S.projects.filter((p) => p.memoryCount).map((p) => el('option', { value: p.dir, text: `${shortPath(p.cwd)} (${p.memoryCount})` })));
+    ...S.projects.filter((p) => p.memoryCount).map((p) => el('option', { value: pkey(p), text: `${shortPath(p.cwd)} (${p.memoryCount})${p.profile !== 'default' ? ` · ${p.profile}` : ''}` })));
   sel.value = S.memProject;
 }
 async function loadMemory() { S.memory = null; await ensureMemory(); renderMemoryList(); if (S.memSel) selectMemory(S.memory.find((m) => m.file === S.memSel.file) || null); }
@@ -537,7 +540,7 @@ function memRow(m, onclick) {
 }
 function renderMemoryList() {
   const q = S.memFilter.toLowerCase();
-  const rows = S.memory.filter((m) => (!S.memProject || m.projectDir === S.memProject) &&
+  const rows = S.memory.filter((m) => (!S.memProject || pkey({ profile: m.profile, dir: m.projectDir }) === S.memProject) &&
     (!q || `${m.name} ${m.description} ${m.project} ${m.base}`.toLowerCase().includes(q)));
   $('#memory-list').replaceChildren(...rows.map((m) => memRow(m, () => selectMemory(m))));
 }
@@ -588,14 +591,15 @@ function editMemory(m, body) {
   ta.focus();
 }
 function copyBar(m) {
-  const sel = el('select', {}, ...S.projects.filter((p) => p.dir !== m.projectDir).map((p) => el('option', { value: p.dir, text: shortPath(p.cwd) })));
-  const current = cur()?.projectDir; // default target: the project of the session tab you are working in
-  if (current && current !== m.projectDir && S.projects.some((p) => p.dir === current)) sel.value = current;
+  const sel = el('select', {}, ...S.projects.filter((p) => !(p.dir === m.projectDir && p.profile === m.profile)).map((p) => el('option', { value: pkey(p), text: `${shortPath(p.cwd)}${p.profile !== 'default' ? ` · ${p.profile}` : ''}` })));
+  const c = cur(), current = c?.projectDir && pkey({ profile: c.profile, dir: c.projectDir }); // default target: the project of the session tab you are working in
+  if (current && S.projects.some((p) => pkey(p) === current && !(p.dir === m.projectDir && p.profile === m.profile))) sel.value = current;
   const msg = el('span', { class: 'msg' });
   const go = async () => {
     msg.className = 'msg'; msg.textContent = '복사 중…';
-    let r = await api.copyMemory({ src: m.file, destProjectDir: sel.value }).catch((e) => ({ error: e.message }));
-    if (r.exists && confirm('대상 프로젝트에 같은 이름의 메모리가 있습니다. 덮어쓸까요?')) r = await api.copyMemory({ src: m.file, destProjectDir: sel.value, overwrite: true }).catch((e) => ({ error: e.message }));
+    const dest = unpkey(sel.value);
+    let r = await api.copyMemory({ src: m.file, destProjectDir: dest.dir, destProfile: dest.profile }).catch((e) => ({ error: e.message }));
+    if (r.exists && confirm('대상 프로젝트에 같은 이름의 메모리가 있습니다. 덮어쓸까요?')) r = await api.copyMemory({ src: m.file, destProjectDir: dest.dir, destProfile: dest.profile, overwrite: true }).catch((e) => ({ error: e.message }));
     if (r.error) { msg.className = 'msg err'; msg.textContent = r.error; }
     else if (r.exists) { msg.textContent = '취소됨'; }
     else { msg.className = 'msg ok'; msg.textContent = `복사됨 → ${shortPath(r.dest)}  (MEMORY.md 인덱스 갱신)`; S.memory = null; }
@@ -620,14 +624,16 @@ const dlgMem = $('#dlg-memory');
 $('#btn-new-memory').onclick = async () => {
   await ensureMemory();
   const sel = $('#nm-project');
-  sel.replaceChildren(...S.projects.map((p) => el('option', { value: p.dir, text: shortPath(p.cwd) })));
-  sel.value = S.memProject || cur()?.projectDir || S.projects[0]?.dir || ''; // the filtered project, else the session you're in
+  sel.replaceChildren(...S.projects.map((p) => el('option', { value: pkey(p), text: `${shortPath(p.cwd)}${p.profile !== 'default' ? ` · ${p.profile}` : ''}` })));
+  const c = cur();
+  sel.value = S.memProject || (c?.projectDir ? pkey({ profile: c.profile, dir: c.projectDir }) : '') || (S.projects[0] ? pkey(S.projects[0]) : ''); // the filtered project, else the session you're in
   $('#nm-name').value = ''; $('#nm-desc').value = '';
   dlgMem.showModal();
 };
 dlgMem.onclose = async () => {
   if (dlgMem.returnValue !== 'ok') return;
-  const req = { projectDir: $('#nm-project').value, name: $('#nm-name').value, type: $('#nm-type').value, description: $('#nm-desc').value };
+  const dest = unpkey($('#nm-project').value);
+  const req = { projectDir: dest.dir, profile: dest.profile, name: $('#nm-name').value, type: $('#nm-type').value, description: $('#nm-desc').value };
   try {
     const r = await api.createMemory(req);
     S.memory = null; await ensureMemory();
@@ -638,11 +644,15 @@ dlgMem.onclose = async () => {
 
 // ---------- new session ----------
 const dlg = $('#dlg-new');
-const OPTS = { model: '#new-model', effort: '#new-effort', permissionMode: '#new-permission', agent: '#new-agent', mode: '#new-mode' };
+const OPTS = { profile: '#new-profile', model: '#new-model', effort: '#new-effort', permissionMode: '#new-permission', agent: '#new-agent', mode: '#new-mode' };
 function readOpts() { const o = {}; for (const [k, sel] of Object.entries(OPTS)) o[k] = $(sel).value.trim(); return o; }
 $('#btn-new').onclick = () => {
   $('#new-cwd').value = isAbs(cur()?.cwd) ? cur().cwd : '';
+  const ps = $('#new-profile');
+  ps.replaceChildren(...S.profiles.map((p) => el('option', { value: p.id === 'default' ? '' : p.id, text: p.id === 'default' ? 'Claude (기본 · ~/.claude)' : `${p.name}${p.model ? ` · ${p.model}` : ''} (${shortPath(p.dir)})` })));
+  ps.closest('label').hidden = S.profiles.length < 2; // one profile: nothing to choose
   try { const last = JSON.parse(localStorage.getItem('newSessionOpts') || '{}'); for (const [k, sel] of Object.entries(OPTS)) $(sel).value = last[k] || ''; } catch { /* no saved options */ }
+  if (cur()?.profile && cur().profile !== 'default') ps.value = cur().profile; // follow the session you are looking at
   dlg.showModal();
 };
 $('#new-pick').onclick = async () => { const d = await api.pickDir(); if (d) $('#new-cwd').value = d; };
@@ -662,8 +672,8 @@ dlg.onclose = async () => {
   }
   if (!r.untrusted) return alert(r.output || '세션 생성 실패');
   // Untrusted folder: open claude interactively in our terminal so the trust prompt can be answered.
-  const flags = Object.entries({ name, ...opts }).flatMap(([k, v]) => v ? [{ name: '--name', model: '--model', effort: '--effort', permissionMode: '--permission-mode', agent: '--agent' }[k], v] : []);
-  const local = { sessionId: 'local-' + Date.now(), local: true, name: name || baseName(cwd), cwd, args: [...flags, ...(prompt ? [prompt] : [])] };
+  const flags = Object.entries({ name, ...opts }).flatMap(([k, v]) => { const f = { name: '--name', model: '--model', effort: '--effort', permissionMode: '--permission-mode', agent: '--agent' }[k]; return v && f ? [f, v] : []; });
+  const local = { sessionId: 'local-' + Date.now(), local: true, name: name || baseName(cwd), cwd, profile: opts.profile || 'default', args: [...flags, ...(prompt ? [prompt] : [])] };
   S.local.push(local);
   S.tab = 'terminal';
   openSession(local.sessionId);
@@ -685,7 +695,7 @@ function showCtx(e, s) {
       : (!s.live || bg) ? item(s.live ? '붙기 (attach)' : '이어가기 (resume)', () => { openSession(s.sessionId); S.tab = 'terminal'; renderDetail(); attach(s); }) : null,
     el('div', { class: 'sep' }),
     s.local ? null : item('이름 변경…', () => renameFlow(s)),
-    s.job ? item(s.pinned ? '핀 해제' : '핀 고정 (맨 위로)', () => api.setPinned(s.short, !s.pinned).then(loadSessions)) : null,
+    s.job ? item(s.pinned ? '핀 해제' : '핀 고정 (맨 위로)', () => api.setPinned(s.short, !s.pinned, s.profile).then(loadSessions)) : null,
     bg && s.live ? item('중지', () => act('stop', s)) : null,
     bg ? item('재시작 (respawn)', () => act('respawn', s)) : null,
     el('div', { class: 'sep' }),
@@ -711,7 +721,7 @@ function renameFlow(s) {
   dlgRename.onclose = async () => {
     const name = $('#rename-name').value.trim();
     if (dlgRename.returnValue !== 'ok' || !name || name === s.name) return;
-    await api.renameSession({ sessionId: s.sessionId, projectDir: s.projectDir, name }).catch((e) => alert(e.message));
+    await api.renameSession({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile, name }).catch((e) => alert(e.message));
     if (s.live) {
       const t = S.terms.get(s.sessionId);
       if (t?.ptyId) api.ptyWrite(t.ptyId, `/rename ${name}\r`);
@@ -729,12 +739,12 @@ function renameFlow(s) {
 async function deleteFlow(s) {
   if (s.kind === 'background') {
     if (!confirm(`"${s.name}" 백그라운드 세션을 삭제할까요?${s.live ? ' (실행 중이라 먼저 중지합니다)' : ''}\n트랜스크립트는 남습니다.`)) return;
-    if (s.live) await api.agentAction('stop', s.short);
-    const r = await api.agentAction('rm', s.short);
+    if (s.live) await api.agentAction('stop', s.short, s.profile);
+    const r = await api.agentAction('rm', s.short, s.profile);
     if (!r.ok) alert(r.output || 'rm 실패');
   } else {
     if (!confirm(`"${s.name}" 의 트랜스크립트(${fmtBytes(s.size)})를 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.`)) return;
-    await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir }).catch((e) => alert(e.message));
+    await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));
   }
   closeTab(s.sessionId);
   loadSessions();

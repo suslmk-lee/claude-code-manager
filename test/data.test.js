@@ -316,3 +316,32 @@ test('readTailTitle follows a /background hand-off (continued-in) until the old 
   fs.appendFileSync(f, line({ type: 'user', timestamp: '2026-10-18T00:01:00.000Z', message: { content: 'resumed here' } }));
   assert.equal((await data.readTailTitle(f)).continuedIn, undefined);
 });
+
+test('profiles: a sibling <config>-<id> dir is a second profile with its own sessions, env and transcripts', async () => {
+  const alt = tmp + '-alt', aid = '55555555-aaaa-bbbb-cccc-000000000000';
+  fs.mkdirSync(path.join(alt, 'projects', '-tmp-c'), { recursive: true });
+  fs.writeFileSync(path.join(alt, 'settings.json'), JSON.stringify({ model: 'OTHER-MODEL', env: {} }));
+  fs.writeFileSync(path.join(alt, 'projects', '-tmp-c', `${aid}.jsonl`),
+    line({ type: 'user', timestamp: '2026-10-09T00:00:01.000Z', message: { role: 'user', content: 'alt hello' } }) +
+    asst('2026-10-09T00:00:02.000Z', { input_tokens: 5, output_tokens: 7 }, [{ type: 'text', text: 'alt reply' }]));
+  const ps = data.profiles();
+  assert.deepEqual(ps.map((p) => [p.id, p.dir, p.model]), [['default', tmp, null], ['alt', alt, 'OTHER-MODEL']]);
+  const L = data.launcher('alt');
+  assert.equal(L.env.CLAUDE_CONFIG_DIR, alt);
+  assert.equal(data.launcher('default').env.CLAUDE_CONFIG_DIR, tmp); // the test's own CLAUDE_CONFIG_DIR, untouched
+  const ss = await data.listSessions();
+  const a = ss.find((s) => s.sessionId === aid);
+  assert.equal(a.profile, 'alt');
+  assert.ok(ss.some((s) => s.profile === 'default'));
+  assert.equal(await data.findTranscript(aid), path.join(alt, 'projects', '-tmp-c', `${aid}.jsonl`));
+  assert.equal((await data.transcript(aid)).turns.map((t) => t.text).join('|'), 'alt hello|alt reply');
+  assert.equal((await data.globalStats({ profile: 'alt' })).sessions, 1);
+  assert.ok((await data.globalStats()).sessions >= 2);
+  assert.ok((await data.listProjects()).some((p) => p.profile === 'alt' && p.dir === '-tmp-c'));
+  const m = await data.createMemory({ projectDir: '-tmp-c', profile: 'alt', name: 'alt-note', type: 'project', description: 'in alt' });
+  assert.ok(m.file.startsWith(path.join(alt, 'projects')));
+  assert.ok((await data.listMemory()).some((x) => x.file === m.file && x.profile === 'alt'));
+  await data.setPinned('55555555', true, 'alt');
+  assert.ok(!(await data.readPins()).includes('55555555')); // pins are per profile: the default profile's list is untouched
+  assert.equal(JSON.parse(fs.readFileSync(path.join(alt, 'jobs', 'pins.json'), 'utf8'))[0], '55555555');
+});

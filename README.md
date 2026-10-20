@@ -54,6 +54,14 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   Per-session scans keep per-model and per-day buckets, so the whole page is a sum of cached scans.
 - **대화 tab: tool rows hidden by default** — ⚙ tool calls (Bash, Write, …) and their 도구 결과 rows are hidden
   unless the 도구 호출 checkbox in the bar is on (remembered). A full-text search hit inside a tool row reveals them.
+- **Profiles (several Claude Code config dirs)** — besides `~/.claude`, any sibling dir named `~/.claude-<id>` that
+  holds a `settings.json` or `projects/` is a profile (e.g. `~/.claude-samanda`: the same Claude Code pointed at another
+  model/gateway, with its own sessions, transcripts, jobs and memory). Sessions, memory and stats from every profile
+  appear together; sessions from a non-default profile carry a small badge (flyout, tab, head, status line). Every
+  action on such a session (attach, resume, stop, respawn, rename, pin, chat send, SDK chat, the 셸 panel) runs with
+  that profile's `CLAUDE_CONFIG_DIR`; when a `claude-<id>` launcher exists on PATH it is used for launches, so a
+  launcher that prepares things (a local proxy, say) keeps working. 새 세션 gets a 프로파일 select (hidden with one
+  profile), 통계 a profile filter, and memory copy/create target a (profile, project) pair.
 - **App themes (모양 button in the header or terminal bar → 앱 테마)** — 14 chrome themes with window-style preview
   swatches: 기본 그라파이트 (주황/파랑/초록), 모노크롬, Dracula, Nord, Tokyo Night, Catppuccin Mocha, Gruvbox, Rosé Pine,
   Solarized Dark, and light ones (라이트, Solarized Light, Catppuccin Latte). A theme sets ~12 base colours; buttons,

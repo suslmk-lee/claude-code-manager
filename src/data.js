@@ -7,7 +7,7 @@ const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
 
-const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'); // the default profile's config dir
 const PROJECTS = path.join(HOME, 'projects');
 const JOBS = path.join(HOME, 'jobs');
 let CACHE = path.join(os.tmpdir(), 'claude-code-manager-cache');
@@ -43,10 +43,47 @@ function findClaude() {
   return 'claude';
 }
 
+// ---------- profiles: one Claude Code config dir each ----------
+// The default profile is ~/.claude (or $CLAUDE_CONFIG_DIR). Sibling dirs named like it plus "-<id>" that hold a
+// settings.json or projects/ are further profiles (e.g. ~/.claude-samanda: the same Claude Code pointed at another
+// model/gateway, with its own sessions, transcripts, jobs and memory). A session belongs to exactly one profile and
+// every CLI call for it runs with that profile's CLAUDE_CONFIG_DIR — through a `claude-<id>` launcher on PATH when
+// one exists, since such a launcher may do its own setup (start a local proxy…) before exec'ing claude.
+let profileCache = { at: 0, v: null };
+function profiles() {
+  if (profileCache.v && Date.now() - profileCache.at < 10000) return profileCache.v;
+  const base = path.basename(HOME), parent = path.dirname(HOME);
+  const out = [{ id: 'default', name: 'Claude', dir: HOME, model: null }];
+  let entries = []; try { entries = fs.readdirSync(parent, { withFileTypes: true }); } catch { /* no parent */ }
+  for (const e of entries) {
+    if (!e.isDirectory() || !e.name.startsWith(base + '-')) continue;
+    const dir = path.join(parent, e.name), id = e.name.slice(base.length + 1);
+    if (!/^[A-Za-z0-9_.-]+$/.test(id) || !(fs.existsSync(path.join(dir, 'settings.json')) || fs.existsSync(path.join(dir, 'projects')))) continue;
+    let model = null; try { model = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8')).model || null; } catch { /* no settings */ }
+    out.push({ id, name: id, dir, model });
+  }
+  profileCache = { at: Date.now(), v: out };
+  return out;
+}
+const profile = (id) => profiles().find((p) => p.id === id) || profiles()[0];
+const pdir = (p, ...parts) => path.join(p.dir, ...parts);
+const findBin = (name) => { for (const d of EXTRA_PATH) { const f = path.join(d, name); if (fs.existsSync(f)) return f; } return null; };
+// Binary + env that run Claude Code for a profile. launch=true prefers the profile's own `claude-<id>` launcher
+// (it may prepare things before exec'ing claude); plain queries (agents, --version) skip it for speed.
+function launcher(profileId, { launch = false } = {}) {
+  const p = profile(profileId), e = env();
+  if (p.id === 'default') return { bin: findClaude(), env: e, profile: p };
+  e.CLAUDE_CONFIG_DIR = p.dir;
+  const wrapper = launch && !IS_WIN ? findBin(`claude-${p.id}`) : null;
+  return { bin: wrapper || findClaude(), env: e, profile: p };
+}
+function listProfiles() { profileCache.at = 0; return profiles().map((p) => ({ ...p })); }
+
 function claude(args, opts = {}) {
   return new Promise((resolve) => {
-    let bin = findClaude(), a = args;
-    const o = { env: env(), cwd: opts.cwd, maxBuffer: 64 << 20, windowsHide: true };
+    const L = launcher(opts.profile, { launch: !!opts.launch });
+    let bin = L.bin, a = args;
+    const o = { env: L.env, cwd: opts.cwd, maxBuffer: 64 << 20, windowsHide: true };
     if (isCmd(bin)) { o.shell = true; bin = `"${bin}"`; a = args.map((x) => `"${String(x).replace(/"/g, '""')}"`); } // Node refuses .cmd/.bat without a shell; quote for cmd.exe
     execFile(bin, a, o, (err, stdout, stderr) => {
       resolve({ code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr) });
@@ -75,17 +112,17 @@ async function writeAtomic(file, text) {
 
 // ---------- sessions ----------
 
-async function listAgents() {
-  const { code, stdout } = await claude(['agents', '--json', '--all']);
+async function listAgents(p = profile()) {
+  const { code, stdout } = await claude(['agents', '--json', '--all'], { profile: p.id });
   if (code !== 0) return [];
   try { return JSON.parse(stdout); } catch { return []; }
 }
 
 // history.jsonl: one line per prompt → cheap index of every session with its real cwd.
-async function readHistory() {
+async function readHistory(p = profile()) {
   const bySession = new Map();
   let text = '';
-  try { text = await fsp.readFile(path.join(HOME, 'history.jsonl'), 'utf8'); } catch { return bySession; }
+  try { text = await fsp.readFile(pdir(p, 'history.jsonl'), 'utf8'); } catch { return bySession; }
   for (const line of text.split(/\r?\n/)) {
     if (!line) continue;
     let d; try { d = JSON.parse(line); } catch { continue; }
@@ -167,19 +204,20 @@ async function gitInfo(cwd) {
   return info;
 }
 
-const PINS = path.join(JOBS, 'pins.json'); // fleet view pins: a plain array of short ids
-const readPins = () => readJson(PINS, []);
-async function setPinned(short, on) {
+const pinsFile = (p) => pdir(p, 'jobs', 'pins.json'); // fleet view pins: a plain array of short ids
+const readPins = (p = profile()) => readJson(pinsFile(p), []);
+async function setPinned(short, on, profileId) {
   if (!/^[0-9a-f]{8}$/.test(short)) throw new Error('bad id');
-  const pins = (await readPins()).filter((p) => p !== short);
+  const p = profile(profileId);
+  const pins = (await readPins(p)).filter((x) => x !== short);
   if (on) pins.push(short);
-  await fsp.mkdir(JOBS, { recursive: true });
-  await writeAtomic(PINS, JSON.stringify(pins, null, 2) + '\n');
+  await fsp.mkdir(pdir(p, 'jobs'), { recursive: true });
+  await writeAtomic(pinsFile(p), JSON.stringify(pins, null, 2) + '\n');
   return pins;
 }
 
-async function readJob(short) {
-  const job = await readJson(path.join(JOBS, short, 'state.json'), null);
+async function readJob(short, p = profile()) {
+  const job = await readJson(pdir(p, 'jobs', short, 'state.json'), null);
   return job && {
     state: job.state, detail: job.detail, tokens: job.tokens, updatedAt: job.updatedAt, intent: job.intent,
     needs: typeof job.needs === 'string' ? job.needs : null,
@@ -189,9 +227,9 @@ async function readJob(short) {
 }
 
 // ~/.claude/sessions/<pid>.json carries the Claude Code version each live process runs.
-async function liveVersions() {
+async function liveVersions(p = profile()) {
   const out = {};
-  const dir = path.join(HOME, 'sessions');
+  const dir = pdir(p, 'sessions');
   for (const f of (await fsp.readdir(dir).catch(() => [])).filter((f) => f.endsWith('.json'))) {
     const d = await readJson(path.join(dir, f), null);
     if (d?.sessionId && d.version) out[d.sessionId] = d.version;
@@ -205,22 +243,30 @@ async function cliVersion() {
   cliVersionCache = { at: Date.now(), v: /\d+\.\d+\.\d+/.exec(r.stdout)?.[0] || null };
   return cliVersionCache.v;
 }
-const respawnAll = async () => { const r = await claude(['respawn', '--all']); return { ok: r.code === 0, output: (r.stdout + r.stderr).trim() }; };
+const respawnAll = async () => { // every profile's daemon
+  const rs = await Promise.all(profiles().map((p) => claude(['respawn', '--all'], { profile: p.id, launch: true })));
+  return { ok: rs.every((r) => r.code === 0), output: rs.map((r) => (r.stdout + r.stderr).trim()).filter(Boolean).join('\n') };
+};
 
 async function listSessions() {
-  const [agents, history, pins, versions] = await Promise.all([listAgents(), readHistory(), readPins(), liveVersions()]);
+  const all = await Promise.all(profiles().map(listProfileSessions));
+  return all.flat().sort((a, b) => (b.live - a.live) || (b.lastActivity - a.lastActivity));
+}
+async function listProfileSessions(p) {
+  const [agents, history, pins, versions] = await Promise.all([listAgents(p), readHistory(p), readPins(p), liveVersions(p)]);
   const byId = new Map();
+  const projects = pdir(p, 'projects');
   let dirs = [];
-  try { dirs = await fsp.readdir(PROJECTS); } catch { /* no projects yet */ }
+  try { dirs = await fsp.readdir(projects); } catch { /* no projects yet */ }
   await Promise.all(dirs.map(async (dir) => {
     let entries = [];
-    try { entries = await fsp.readdir(path.join(PROJECTS, dir)); } catch { return; }
+    try { entries = await fsp.readdir(path.join(projects, dir)); } catch { return; }
     await Promise.all(entries.filter((e) => e.endsWith('.jsonl')).map(async (e) => {
-      const file = path.join(PROJECTS, dir, e);
+      const file = path.join(projects, dir, e);
       const sessionId = e.slice(0, -6);
-      const [st, title, job] = await Promise.all([fsp.stat(file), readTailTitle(file), readJob(shortId(sessionId))]);
+      const [st, title, job] = await Promise.all([fsp.stat(file), readTailTitle(file), readJob(shortId(sessionId), p)]);
       byId.set(sessionId, {
-        sessionId, short: shortId(sessionId), projectDir: dir, file, size: st.size, mtime: st.mtimeMs,
+        sessionId, short: shortId(sessionId), profile: p.id, projectDir: dir, file, size: st.size, mtime: st.mtimeMs,
         customTitle: title.customTitle, aiTitle: title.aiTitle,
         permissionMode: title.permissionMode || null, lastModel: title.lastModel || null, lastContext: title.lastContext || null, pr: title.pr || null, gitBranch: title.gitBranch || null, workCwd: title.cwd || null, lastTs: title.lastTs || null, continuedIn: title.continuedIn || null,
         pinned: pins.includes(shortId(sessionId)), job,
@@ -228,8 +274,8 @@ async function listSessions() {
     }));
   }));
   for (const a of agents) {
-    const s = byId.get(a.sessionId) || { sessionId: a.sessionId, short: a.id || shortId(a.sessionId) };
-    if (!s.job) s.job = await readJob(s.short); // sessions with no transcript yet (fresh --bg) still have job state
+    const s = byId.get(a.sessionId) || { sessionId: a.sessionId, short: a.id || shortId(a.sessionId), profile: p.id };
+    if (!s.job) s.job = await readJob(s.short, p); // sessions with no transcript yet (fresh --bg) still have job state
     Object.assign(s, { agent: a, cwd: a.cwd, kind: a.kind, live: !!a.pid, status: a.status, state: a.state, startedAt: a.startedAt, agentName: a.name, pinned: s.pinned || pins.includes(s.short), version: versions[a.sessionId] || null });
     byId.set(a.sessionId, s);
   }
@@ -246,7 +292,6 @@ async function listSessions() {
     s.live = !!s.live;
     out.push(s);
   }
-  out.sort((a, b) => (b.live - a.live) || (b.lastActivity - a.lastActivity));
   return out;
 }
 
@@ -355,9 +400,9 @@ async function fileStats(file) {
 }
 
 // Everything, aggregated: totals, per project, per model, per day, top tools.
-async function globalStats() {
+async function globalStats({ profile: only } = {}) {
   const [sessions, labels] = await Promise.all([listSessions(), projectLabels()]);
-  const withFile = sessions.filter((s) => s.file);
+  const withFile = sessions.filter((s) => s.file && (!only || s.profile === only));
   const stats = await Promise.all(withFile.map((s) => fileStats(s.file).catch(() => null)));
   const sum = (dst, src) => { for (const k of Object.keys(src)) dst[k] = (dst[k] || 0) + src[k]; };
   const g = { sessions: 0, userMessages: 0, assistantMessages: 0, toolCalls: 0, tokens: { input: 0, cacheRead: 0, cacheCreate: 0, output: 0, thinking: 0 },
@@ -423,9 +468,12 @@ async function loadTurns(file, sessionId) {
 }
 async function findTranscript(sessionId) {
   if (!UUID.test(sessionId)) return null;
-  for (const dir of await fsp.readdir(PROJECTS).catch(() => [])) {
-    const f = path.join(PROJECTS, dir, sessionId + '.jsonl');
-    if (fs.existsSync(f)) return f;
+  for (const p of profiles()) {
+    const projects = pdir(p, 'projects');
+    for (const dir of await fsp.readdir(projects).catch(() => [])) {
+      const f = path.join(projects, dir, sessionId + '.jsonl');
+      if (fs.existsSync(f)) return f;
+    }
   }
   return null;
 }
@@ -501,22 +549,27 @@ function parseFrontmatter(text) {
 
 // encoded project dir → real cwd, learned from history.jsonl and running agents
 async function projectLabels() {
-  const [history, agents] = await Promise.all([readHistory(), listAgents()]);
   const map = {};
-  for (const h of history.values()) if (h.project) map[encodeProject(h.project)] = h.project;
-  for (const a of agents) if (a.cwd) map[encodeProject(a.cwd)] = a.cwd;
+  for (const p of profiles()) {
+    const [history, agents] = await Promise.all([readHistory(p), listAgents(p)]);
+    for (const h of history.values()) if (h.project) map[encodeProject(h.project)] = h.project;
+    for (const a of agents) if (a.cwd) map[encodeProject(a.cwd)] = a.cwd;
+  }
   return map;
 }
 
 async function listProjects() {
   const labels = await projectLabels();
-  let dirs = [];
-  try { dirs = await fsp.readdir(PROJECTS); } catch { /* none */ }
   const out = [];
-  for (const dir of dirs) {
-    let n = 0;
-    try { n = (await fsp.readdir(path.join(PROJECTS, dir, 'memory'))).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md').length; } catch { /* no memory dir */ }
-    out.push({ dir, cwd: labels[dir] || dir, memoryCount: n });
+  for (const p of profiles()) {
+    const projects = pdir(p, 'projects');
+    let dirs = [];
+    try { dirs = await fsp.readdir(projects); } catch { continue; }
+    for (const dir of dirs) {
+      let n = 0;
+      try { n = (await fsp.readdir(path.join(projects, dir, 'memory'))).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md').length; } catch { /* no memory dir */ }
+      out.push({ dir, profile: p.id, cwd: labels[dir] || dir, memoryCount: n });
+    }
   }
   return out.sort((a, b) => b.memoryCount - a.memoryCount || a.cwd.localeCompare(b.cwd));
 }
@@ -525,14 +578,14 @@ async function listMemory() {
   const projects = await listProjects();
   const out = [];
   await Promise.all(projects.filter((p) => p.memoryCount).map(async (p) => {
-    const dir = path.join(PROJECTS, p.dir, 'memory');
+    const dir = pdir(profile(p.profile), 'projects', p.dir, 'memory');
     for (const f of await fsp.readdir(dir)) {
       if (!f.endsWith('.md') || f === 'MEMORY.md') continue;
       const file = path.join(dir, f);
       const [text, st] = await Promise.all([fsp.readFile(file, 'utf8'), fsp.stat(file)]);
       const { meta } = parseFrontmatter(text);
       out.push({
-        file, base: f, projectDir: p.dir, project: p.cwd, size: st.size, mtime: st.mtimeMs,
+        file, base: f, projectDir: p.dir, profile: p.profile, project: p.cwd, size: st.size, mtime: st.mtimeMs,
         name: meta.name || f.replace(/\.md$/, ''), description: meta.description || '', type: meta.type || '',
         originSessionId: meta.originSessionId || null, copiedFrom: meta.copiedFrom || null,
       });
@@ -544,7 +597,8 @@ async function listMemory() {
 function assertInsideProjects(file) {
   const r = path.resolve(file);
   const fold = (p) => IS_WIN ? p.toLowerCase() : p; // drive-letter case may differ on Windows
-  if (!fold(r).startsWith(fold(PROJECTS + path.sep)) || !r.endsWith('.md')) throw new Error('path outside ~/.claude/projects');
+  const inside = profiles().some((p) => fold(r).startsWith(fold(pdir(p, 'projects') + path.sep)));
+  if (!inside || !r.endsWith('.md')) throw new Error('path outside a profile\'s projects dir');
   return r;
 }
 
@@ -552,10 +606,10 @@ async function readMemory(file) {
   return fsp.readFile(assertInsideProjects(file), 'utf8');
 }
 
-async function copyMemory({ src, destProjectDir, overwrite = false }) {
+async function copyMemory({ src, destProjectDir, destProfile, overwrite = false }) {
   src = assertInsideProjects(src);
   if (!/^[A-Za-z0-9-]+$/.test(destProjectDir)) throw new Error('bad project dir');
-  const destDir = path.join(PROJECTS, destProjectDir, 'memory');
+  const destDir = pdir(profile(destProfile), 'projects', destProjectDir, 'memory');
   await fsp.mkdir(destDir, { recursive: true });
   const base = path.basename(src);
   const dest = path.join(destDir, base);
@@ -610,11 +664,11 @@ async function writeMemory(file, text) {
 
 const MEMORY_TYPES = ['user', 'feedback', 'project', 'reference'];
 // New memory with the same frontmatter Claude Code writes; refuses to clobber an existing file.
-async function createMemory({ projectDir, name, type, description }) {
+async function createMemory({ projectDir, profile: profileId, name, type, description }) {
   name = String(name || '').trim().toLowerCase().replace(/[^a-z0-9가-힣_-]+/g, '-').replace(/^-+|-+$/g, '');
   if (!DIR.test(projectDir) || !name) throw new Error('bad project or name');
   if (!MEMORY_TYPES.includes(type)) throw new Error('bad type');
-  const dir = path.join(PROJECTS, projectDir, 'memory');
+  const dir = pdir(profile(profileId), 'projects', projectDir, 'memory');
   const file = path.join(dir, name + '.md');
   if (fs.existsSync(file)) throw new Error(`이미 있습니다: ${name}.md`);
   await fsp.mkdir(dir, { recursive: true });
@@ -633,9 +687,9 @@ async function deleteMemory(file) {
 }
 
 // Hand a (closed) chat session to the daemon: `--bg --resume` keeps the same id when nothing else runs it.
-async function resumeInBackground({ sessionId, cwd, name }) {
+async function resumeInBackground({ sessionId, cwd, name, profile: profileId }) {
   if (!UUID.test(sessionId)) throw new Error('bad id');
-  const r = await claude(['--bg', ...sessionFlags({ name }), '--resume', sessionId], { cwd });
+  const r = await claude(['--bg', ...sessionFlags({ name }), '--resume', sessionId], { cwd, profile: profileId, launch: true });
   const output = (r.stdout + r.stderr).trim();
   if (r.code !== 0) return { ok: false, untrusted: /not trusted/i.test(output), output };
   const m = /backgrounded\s*·\s*([0-9a-f]{8})/.exec(output);
@@ -647,11 +701,11 @@ async function resumeInBackground({ sessionId, cwd, name }) {
 // Writes the places Claude Code reads a name from: the job record (+ respawn flags) and the
 // transcript's custom-title.json. A live worker owns its own in-memory name, so for live
 // sessions the renderer additionally sends `/rename` through the attached terminal.
-async function renameSession({ sessionId, projectDir, name }) {
+async function renameSession({ sessionId, projectDir, profile: profileId, name }) {
   name = String(name || '').trim();
   if (!name || !UUID.test(sessionId)) throw new Error('bad rename');
-  const done = [];
-  const stateFile = path.join(JOBS, shortId(sessionId), 'state.json');
+  const done = [], p = profile(profileId);
+  const stateFile = pdir(p, 'jobs', shortId(sessionId), 'state.json');
   const job = await readJson(stateFile, null);
   if (job) {
     job.name = name; job.nameSource = 'user';
@@ -663,7 +717,7 @@ async function renameSession({ sessionId, projectDir, name }) {
     done.push('job');
   }
   if (projectDir && DIR.test(projectDir)) {
-    const dir = path.join(PROJECTS, projectDir, sessionId);
+    const dir = pdir(p, 'projects', projectDir, sessionId);
     await fsp.mkdir(dir, { recursive: true });
     await writeAtomic(path.join(dir, 'custom-title.json'), JSON.stringify({ customTitle: name }));
     done.push('title');
@@ -672,9 +726,9 @@ async function renameSession({ sessionId, projectDir, name }) {
 }
 
 // For sessions that only exist as a transcript (no background job): remove the .jsonl and its sidecar dir.
-async function deleteTranscript({ sessionId, projectDir }) {
+async function deleteTranscript({ sessionId, projectDir, profile: profileId }) {
   if (!UUID.test(sessionId) || !DIR.test(projectDir)) throw new Error('bad id');
-  const base = path.join(PROJECTS, projectDir, sessionId);
+  const base = pdir(profile(profileId), 'projects', projectDir, sessionId);
   await fsp.rm(base + '.jsonl', { force: true });
   await fsp.rm(base, { recursive: true, force: true });
   await fsp.rm(path.join(CACHE, 'stats', sessionId + '.json'), { force: true });
@@ -683,9 +737,9 @@ async function deleteTranscript({ sessionId, projectDir }) {
 
 // ---------- session lifecycle (delegated to the CLI) ----------
 
-async function agentAction(action, id) {
+async function agentAction(action, id, profileId) {
   if (!['stop', 'rm', 'respawn'].includes(action)) throw new Error('bad action');
-  const r = await claude([action, id]);
+  const r = await claude([action, id], { profile: profileId, launch: action === 'respawn' });
   return { ok: r.code === 0, output: (r.stdout + r.stderr).trim() };
 }
 
@@ -708,7 +762,7 @@ async function newSession(opts) {
   const { cwd, prompt } = opts;
   const args = ['--bg', ...sessionFlags(opts)];
   if (prompt) args.push(prompt);
-  const r = await claude(args, { cwd });
+  const r = await claude(args, { cwd, profile: opts.profile, launch: true });
   const output = (r.stdout + r.stderr).trim();
   if (r.code !== 0) return { ok: false, untrusted: /not trusted/i.test(output), output };
   const m = /backgrounded\s*·\s*([0-9a-f]{8})/.exec(output);
@@ -716,7 +770,7 @@ async function newSession(opts) {
 }
 
 module.exports = {
-  IS_WIN, HOME, PROJECTS, env, findClaude, encodeProject, parseFrontmatter, ingest, emptyStats,
+  IS_WIN, HOME, PROJECTS, env, findClaude, profiles: listProfiles, launcher, encodeProject, parseFrontmatter, ingest, emptyStats,
   listSessions, listAgents, sessionStats, fileStats, globalStats, readPins, setPinned, listProjects, transcript, searchTranscripts, findTranscript, streamLines, ingestTurn, readTailTitle, usage, gitInfo, account, listMemory, readMemory, copyMemory, writeMemory, deleteMemory, createMemory, MEMORY_TYPES,
   agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; },
 };
