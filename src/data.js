@@ -5,7 +5,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const os = require('os');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'); // the default profile's config dir
 const PROJECTS = path.join(HOME, 'projects');
@@ -83,11 +83,16 @@ function claude(args, opts = {}) {
   return new Promise((resolve) => {
     const L = launcher(opts.profile, { launch: !!opts.launch });
     let bin = L.bin, a = args;
-    const o = { env: L.env, cwd: opts.cwd, maxBuffer: 64 << 20, windowsHide: true };
+    // stdin must be closed: given an open (empty) pipe, Claude Code waits ~3 s for piped prompt input before every
+    // command — that was the pause behind 시작 and behind each session-list refresh. execFile cannot close it; spawn can.
+    const o = { env: L.env, cwd: opts.cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] };
     if (isCmd(bin)) { o.shell = true; bin = `"${bin}"`; a = args.map((x) => `"${String(x).replace(/"/g, '""')}"`); } // Node refuses .cmd/.bat without a shell; quote for cmd.exe
-    execFile(bin, a, o, (err, stdout, stderr) => {
-      resolve({ code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr) });
-    });
+    let stdout = '', stderr = '', p;
+    try { p = spawn(bin, a, o); } catch (e) { return resolve({ code: 1, stdout: '', stderr: String(e.message) }); }
+    p.stdout.on('data', (c) => { if (stdout.length < (64 << 20)) stdout += c; });
+    p.stderr.on('data', (c) => { if (stderr.length < (8 << 20)) stderr += c; });
+    p.on('error', (e) => resolve({ code: 1, stdout, stderr: stderr + e.message }));
+    p.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }
 

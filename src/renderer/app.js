@@ -422,6 +422,7 @@ function resyncViewport(term) {
   term.scrollToLine(y);
 }
 function showTerminal(s, pane) {
+  if (s.starting) { pane.append(el('div', { class: 'starting' }, el('span', { class: 'spin' }), el('span', { text: `"${s.name}" 세션을 시작하는 중… (claude --bg${s.profile !== 'default' ? ` · ${s.profile}` : ''})` }))); return; }
   let t = S.terms.get(s.sessionId);
   if (!t) { t = createTerm(s); S.terms.set(s.sessionId, t); }
   pane.append(t.bar, t.box);
@@ -692,13 +693,19 @@ dlg.onclose = async () => {
   const { mode, ...opts } = readOpts();
   try { localStorage.setItem('newSessionOpts', JSON.stringify({ ...opts, mode })); } catch { /* fine */ }
   if (mode === 'chat') { newChatTab({ cwd, name, prompt, opts }); return; }
+  // instant feedback: a placeholder tab while `claude --bg` boots the worker (≈1–3 s), swapped for the real session
+  const ph = { sessionId: 'starting-' + Date.now(), local: true, starting: true, name: name || baseName(cwd), cwd, profile: opts.profile || 'default' };
+  S.local.push(ph); S.tab = 'terminal'; openSession(ph.sessionId);
+  const dropPlaceholder = (replaceWith) => { const i = S.tabs.indexOf(ph.sessionId); S.local = S.local.filter((x) => x !== ph); if (replaceWith && i !== -1) S.tabs[i] = replaceWith; else S.tabs = S.tabs.filter((x) => x !== ph.sessionId); if (S.sel === ph.sessionId) S.sel = replaceWith || S.tabs[0] || null; };
   const r = await api.newSession({ cwd, name, prompt, ...opts }).catch((e) => ({ ok: false, output: e.message }));
   if (r.ok) {
     await loadSessions();
     const s = S.sessions.find((x) => x.short === r.id);
-    if (s) { S.tab = 'terminal'; openSession(s.sessionId); }
+    dropPlaceholder(s?.sessionId);
+    if (s) { S.tab = 'terminal'; openSession(s.sessionId); } else { renderSessionList(); renderTabs(); renderDetail(); }
     return;
   }
+  dropPlaceholder(); renderSessionList(); renderTabs(); renderDetail();
   if (!r.untrusted) return alert(r.output || '세션 생성 실패');
   // Untrusted folder: open claude interactively in our terminal so the trust prompt can be answered.
   const flags = Object.entries({ name, ...opts }).flatMap(([k, v]) => { const f = { name: '--name', model: '--model', effort: '--effort', permissionMode: '--permission-mode', agent: '--agent' }[k]; return v && f ? [f, v] : []; });
