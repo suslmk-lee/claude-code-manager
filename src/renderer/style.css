@@ -107,7 +107,11 @@ section { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hid
 .sess .age { text-align:right; font-variant-numeric:tabular-nums; }
 .sess .links { color:var(--acc); font-size:11px; }
 .glyph { display:inline-block; width:1.2em; color:var(--dim); }
-.glyph.busy, .glyph.working { color:var(--acc); }
+.glyph.busy, .glyph.working { color:var(--acc); animation:glyph-work 1.6s ease-in-out infinite; transform-origin:50% 55%; } /* the session is working: the ✱ breathes and turns */
+.glyph.blocked { animation:glyph-wait 1.2s ease-in-out infinite; } /* waiting for you: a soft blink */
+@keyframes glyph-work { 0% { transform:rotate(0deg) scale(1); opacity:1; } 50% { transform:rotate(180deg) scale(.82); opacity:.55; } 100% { transform:rotate(360deg) scale(1); opacity:1; } }
+@keyframes glyph-wait { 0%, 100% { opacity:1; } 50% { opacity:.35; } }
+@media (prefers-reduced-motion: reduce) { .glyph.busy, .glyph.working, .glyph.blocked { animation:none; } }
 .glyph.idle, .glyph.done { color:var(--ok); }
 .glyph.blocked { color:var(--warn); }
 
