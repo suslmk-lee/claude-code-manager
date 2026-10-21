@@ -28,7 +28,11 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, webviewTag: true },
   });
   if (!isMac) { win.on('page-title-updated', (e) => e.preventDefault()); win.on('focus', () => win.flashFrame(false)); } // keep the "(n)" badge title
-  win.on('closed', () => { win = null; for (const p of ptys.values()) p.kill(); ptys.clear(); chat.closeAll(); });
+  // Everything the page owns dies with the page: on close, and on a reload (보기 → Reload) too. Reusing a live attach pty
+  // after a reload would hand the fresh xterm a TUI whose init (alternate screen, mouse tracking…) was sent to the old one.
+  const releasePageResources = () => { for (const p of ptys.values()) p.kill(); ptys.clear(); attachPtys.clear(); ptyLast.clear(); chat.closeAll(); stopTail(); };
+  win.on('closed', () => { win = null; releasePageResources(); });
+  win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) releasePageResources(); });
   // links in rendered markdown open in the browser; the window itself never navigates away
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
