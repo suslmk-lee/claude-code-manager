@@ -59,10 +59,10 @@ header button.icon { padding:6px 8px; } header button.icon svg { width:15px; hei
 .tab.dragging { opacity:.35; }
 .tab.drop-before { box-shadow:-3px 0 0 var(--acc); }
 .tab.drop-after { box-shadow:3px 0 0 var(--acc); }
-.tab { display:flex; align-items:center; gap:6px; padding:5px 8px 5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--tab); color:var(--dim); cursor:pointer; white-space:nowrap; max-width:200px; font-size:12.5px; }
+.tab { display:flex; align-items:center; gap:6px; padding:5px 8px 5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--tab); color:var(--dim); cursor:pointer; white-space:nowrap; flex:0 1 auto; min-width:100px; max-width:200px; font-size:12.5px; } /* shrink to 100px (half) before the strip starts scrolling */
 .tab:hover { color:var(--fg); }
 .tab.active { background:var(--bg); color:var(--fg); border-color:var(--acc); }
-.tab .label { overflow:hidden; text-overflow:ellipsis; }
+.tab .label { overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto; }
 .pbadge { display:inline-block; font-size:10px; font-weight:600; line-height:1.4; padding:0 5px; margin-left:6px; border-radius:6px; background:color-mix(in srgb, var(--warn) 22%, var(--panel)); color:var(--warn); vertical-align:1px; white-space:nowrap; } /* session from another profile (config dir) */
 .tab .x { color:var(--dim); padding:0 2px; border-radius:4px; line-height:1; }
 .tab .x:hover { background:var(--sel); color:var(--fg); }
