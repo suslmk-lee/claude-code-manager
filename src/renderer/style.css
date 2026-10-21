@@ -106,12 +106,17 @@ section { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hid
 .sess .detail, .sess .age { color:var(--dim); }
 .sess .age { text-align:right; font-variant-numeric:tabular-nums; }
 .sess .links { color:var(--acc); font-size:11px; }
-.glyph { display:inline-block; width:1.2em; color:var(--dim); }
-.glyph.busy, .glyph.working { color:var(--acc); animation:glyph-work 1.6s ease-in-out infinite; transform-origin:50% 55%; } /* the session is working: the ✱ breathes and turns */
-.glyph.blocked { animation:glyph-wait 1.2s ease-in-out infinite; } /* waiting for you: a soft blink */
-@keyframes glyph-work { 0% { transform:rotate(0deg) scale(1); opacity:1; } 50% { transform:rotate(180deg) scale(.82); opacity:.55; } 100% { transform:rotate(360deg) scale(1); opacity:1; } }
-@keyframes glyph-wait { 0%, 100% { opacity:1; } 50% { opacity:.35; } }
-@media (prefers-reduced-motion: reduce) { .glyph.busy, .glyph.working, .glyph.blocked { animation:none; } }
+/* session state dot: colour = state; solid with a soft halo = running, hollow ring = not running;
+   a thin ripple spreads while a running session works, slower while it waits for input */
+.glyph { position:relative; display:inline-block; width:8px; height:8px; border-radius:50%; color:var(--dim); background:currentColor; flex:none; vertical-align:middle; margin:-1px 8px 0 0; }
+#tabs .glyph { margin-right:2px; }
+.glyph.idle, .glyph.done { color:var(--ok); } .glyph.busy, .glyph.working { color:var(--acc); } .glyph.blocked { color:var(--warn); }
+.glyph.live { box-shadow:0 0 0 2.5px color-mix(in srgb, currentColor 22%, transparent); }
+.glyph.off { background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb, currentColor 80%, transparent); }
+.glyph.live.busy::after, .glyph.live.working::after, .glyph.live.blocked::after { content:''; position:absolute; inset:-1px; border-radius:50%; border:1.5px solid currentColor; animation:ripple 2s cubic-bezier(.2,.6,.3,1) infinite; }
+.glyph.live.blocked::after { animation-duration:2.8s; }
+@keyframes ripple { 0% { transform:scale(.8); opacity:.75; } 75% { transform:scale(2.6); opacity:0; } 100% { transform:scale(2.6); opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .glyph::after { animation:none; display:none; } }
 .glyph.idle, .glyph.done { color:var(--ok); }
 .glyph.blocked { color:var(--warn); }
 

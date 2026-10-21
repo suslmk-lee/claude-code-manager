@@ -156,7 +156,7 @@ function renderTabs() {
       ondragleave: () => t.classList.remove('drop-before', 'drop-after'),
       ondrop: (e) => { e.preventDefault(); e.stopPropagation(); moveTab(S.dragTab, s.sessionId, t.classList.contains('drop-after')); },
       ondragend: () => { S.dragTab = null; renderTabs(); } },
-      el('span', { class: 'glyph ' + st, text: s.live || s.local ? '✱' : '•' }),
+      el('span', { class: `glyph ${st} ${s.live || s.local ? 'live' : 'off'}` }),
       el('span', { class: 'label', text: s.name }),
       profileBadge(s),
       S.unseen.has(s.sessionId) ? el('span', { class: 'pill', text: '입력' }) : null,
@@ -239,7 +239,7 @@ function sessionRow(s) {
   const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
   const detail = s.job?.needs || s.job?.detail || s.lastPrompt || s.job?.intent || '';
   return el('div', { class: 'sess' + (s.sessionId === S.sel ? ' sel' : ''), 'data-tip': `${shortPath(s.cwd)}\n${detail}`, onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s) },
-    el('span', { class: 'name' }, el('span', { class: 'glyph ' + st, text: s.live ? '✱' : '•' }), s.name, profileBadge(s)),
+    el('span', { class: 'name' }, el('span', { class: `glyph ${st} ${s.live ? 'live' : 'off'}` }), s.name, profileBadge(s)),
     el('span', { class: 'detail', text: detail }),
     el('span', { class: 'links', text: linksLabel(s.job) }),
     el('span', { class: 'age', text: fmtAgo(s.lastActivity) }));
