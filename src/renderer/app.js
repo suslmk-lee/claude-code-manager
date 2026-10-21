@@ -681,11 +681,18 @@ $('#btn-new').onclick = () => {
   const ps = $('#new-profile');
   ps.replaceChildren(...S.profiles.map((p) => el('option', { value: p.id === 'default' ? '' : p.id, text: p.id === 'default' ? 'Claude (기본 · ~/.claude)' : `${p.name}${p.model ? ` · ${p.model}` : ''} (${shortPath(p.dir)})` })));
   ps.closest('label').hidden = S.profiles.length < 2; // one profile: nothing to choose
-  try { const last = JSON.parse(localStorage.getItem('newSessionOpts') || '{}'); for (const [k, sel] of Object.entries(OPTS)) $(sel).value = last[k] || ''; } catch { /* no saved options */ }
+  let last = {};
+  try { last = JSON.parse(localStorage.getItem('newSessionOpts') || '{}'); for (const [k, sel] of Object.entries(OPTS)) $(sel).value = last[k] || ''; } catch { /* no saved options */ }
   if (cur()?.profile && cur().profile !== 'default') ps.value = cur().profile; // follow the session you are looking at
+  // a remembered model must not leak into another profile: `--model` would override that profile's own model
+  if ((last.profile || '') !== ps.value) $('#new-model').value = '';
+  modelHint();
   dlg.showModal();
 };
 $('#new-pick').onclick = async () => { const d = await api.pickDir(); if (d) $('#new-cwd').value = d; };
+// the model field is per profile: switching profiles clears it, and the placeholder names what an empty field means
+function modelHint() { const id = $('#new-profile').value || 'default', p = S.profiles.find((x) => x.id === id); $('#new-model').placeholder = id === 'default' ? '기본값 (settings.json)' : `비워 두면 프로파일 모델 (${p?.model || '설정값'})`; }
+$('#new-profile').onchange = () => { $('#new-model').value = ''; modelHint(); };
 dlg.onclose = async () => {
   if (dlg.returnValue !== 'ok') return;
   const cwd = $('#new-cwd').value, name = $('#new-name').value.trim(), prompt = $('#new-prompt').value.trim();
