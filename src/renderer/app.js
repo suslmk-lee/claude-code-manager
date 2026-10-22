@@ -687,6 +687,7 @@ $('#btn-new').onclick = () => {
   // a remembered model must not leak into another profile: `--model` would override that profile's own model
   if ((last.profile || '') !== ps.value) $('#new-model').value = '';
   modelHint();
+  if (ps.value && isAnthropicModel($('#new-model').value)) $('#new-model').value = ''; // a Claude model name saved with a gateway profile (an older leak)
   dlg.showModal();
 };
 $('#new-pick').onclick = async () => { const d = await api.pickDir(); if (d) $('#new-cwd').value = d; };
@@ -704,7 +705,16 @@ function applyModelOptions() {
   const base = id === 'default' ? inp.__aliases : [p?.model].filter(Boolean);
   inp.__opts = [...new Set([...base, ...seenModels.get(id)])].map((v) => ({ value: v, text: v }));
 }
-function modelHint() { const id = $('#new-profile').value || 'default', p = S.profiles.find((x) => x.id === id); $('#new-model').placeholder = id === 'default' ? '기본값 (settings.json)' : `비워 두면 프로파일 모델 (${p?.model || '설정값'})`; applyModelOptions(); }
+const isAnthropicModel = (m) => !!m && (/^claude-/.test(m) || ($('#new-model').__aliases || []).includes(m));
+function modelHint() {
+  const id = $('#new-profile').value || 'default', p = S.profiles.find((x) => x.id === id), other = id !== 'default';
+  $('#new-model').placeholder = other ? `비워 두면 프로파일 모델 (${p?.model || '설정값'})` : '기본값 (settings.json)';
+  applyModelOptions();
+  // effort is an Anthropic-model setting (thinking budget): meaningless for a gateway profile's model, so it is left off
+  const eff = $('#new-effort'); eff.disabled = other; if (other) eff.value = '';
+  eff.closest('label').classList.toggle('off', other);
+  eff.closest('label').title = other ? `${p?.model || '이 프로파일의 모델'}에는 effort 설정이 적용되지 않습니다` : '';
+}
 $('#new-profile').onchange = () => { $('#new-model').value = ''; modelHint(); };
 dlg.onclose = async () => {
   if (dlg.returnValue !== 'ok') return;

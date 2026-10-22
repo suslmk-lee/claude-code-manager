@@ -82,6 +82,7 @@ input, select, textarea { background:var(--field); color:var(--fg); border:1px s
 /* selects: themed chevron on the closed control (the open list is drawn by select.js) */
 select { appearance:none; -webkit-appearance:none; padding-right:30px; cursor:pointer; background-image:linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%); background-position:calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; transition:border-color .15s, box-shadow .15s; }
 select:hover { border-color:color-mix(in srgb, var(--line) 50%, var(--dim)); }
+select:disabled { opacity:.45; cursor:default; } label.off { color:var(--dim); }
 input.combo { padding-right:30px; background-image:linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%); background-position:calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
 .dd-opt.dd-clear { color:var(--dim); font-style:italic; }
 select:focus-visible { outline:none; border-color:var(--acc); box-shadow:0 0 0 3px color-mix(in srgb, var(--acc) 30%, transparent); }
