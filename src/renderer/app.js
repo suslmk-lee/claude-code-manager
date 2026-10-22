@@ -690,8 +690,21 @@ $('#btn-new').onclick = () => {
   dlg.showModal();
 };
 $('#new-pick').onclick = async () => { const d = await api.pickDir(); if (d) $('#new-cwd').value = d; };
-// the model field is per profile: switching profiles clears it, and the placeholder names what an empty field means
-function modelHint() { const id = $('#new-profile').value || 'default', p = S.profiles.find((x) => x.id === id); $('#new-model').placeholder = id === 'default' ? '기본값 (settings.json)' : `비워 두면 프로파일 모델 (${p?.model || '설정값'})`; }
+// the model field is per profile: switching profiles clears it, the placeholder names what an empty field means, and the
+// list offers that profile's models — the default profile's aliases (the datalist in index.html) or the other profile's
+// settings.json model — plus the models its sessions have actually used (from the stats, fetched once per profile).
+const seenModels = new Map(); // profile id → models seen in its transcripts, most used first
+function applyModelOptions() {
+  const id = $('#new-profile').value || 'default', inp = $('#new-model'), p = S.profiles.find((x) => x.id === id);
+  if (!inp.__aliases) inp.__aliases = (inp.__opts || []).map((o) => o.value); // what select.js read from the datalist
+  if (!seenModels.has(id)) {
+    seenModels.set(id, []);
+    api.globalStats({ profile: id }).then((g) => { seenModels.set(id, Object.entries(g.byModel || {}).filter(([m]) => m !== '<synthetic>').sort((a, b) => b[1].output - a[1].output).map(([m]) => m)); if (($('#new-profile').value || 'default') === id) applyModelOptions(); }).catch(() => {});
+  }
+  const base = id === 'default' ? inp.__aliases : [p?.model].filter(Boolean);
+  inp.__opts = [...new Set([...base, ...seenModels.get(id)])].map((v) => ({ value: v, text: v }));
+}
+function modelHint() { const id = $('#new-profile').value || 'default', p = S.profiles.find((x) => x.id === id); $('#new-model').placeholder = id === 'default' ? '기본값 (settings.json)' : `비워 두면 프로파일 모델 (${p?.model || '설정값'})`; applyModelOptions(); }
 $('#new-profile').onchange = () => { $('#new-model').value = ''; modelHint(); };
 dlg.onclose = async () => {
   if (dlg.returnValue !== 'ok') return;
