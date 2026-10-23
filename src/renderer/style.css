@@ -53,6 +53,7 @@ header button.sq { width:calc(1.3em + 12px); height:calc(1.3em + 12px); padding:
 .gear-pop button.active { color:var(--acc); } .gear-pop button.active:hover { color:var(--on-acc); }
 .gear-pop button kbd { margin-left:auto; font:11px ui-monospace, Menlo, monospace; color:var(--dim); } .gear-pop button:hover kbd { color:var(--on-acc); }
 .gear-pop .sep { height:1px; background:var(--line); margin:4px 2px; }
+.gear-pop .ver { padding:3px 10px 2px; font-size:11px; color:var(--dim); user-select:none; cursor:default; }
 @media (max-width:1500px) { .profile .profile-text, .profile .chev { display:none; } .profile { padding:3px; } } /* narrow window: avatar only (the popover has the name) */
 .tab-arrow { flex:0 0 auto; padding:2px 6px; background:transparent; border-color:transparent; box-shadow:none; color:var(--dim); font-size:16px; line-height:1; }
 .tab-arrow:hover { color:var(--fg); border-color:var(--line); background:color-mix(in srgb, var(--fg) 6%, transparent); box-shadow:none; }

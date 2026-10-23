@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('api', {
   chatList: () => ipcRenderer.invoke('chat:list'),
   onChatEvent: on('chat:event'),
   webviewPreload: ipcRenderer.sendSync('wv:preload'),
+  appVersion: ipcRenderer.sendSync('app:version'),
   trustHost: (host) => ipcRenderer.invoke('wv:trustHost', host),
   captureShot: (wcId, rect, name) => ipcRenderer.invoke('shots:capture', { wcId, rect, name }),
   openSource: (cwd, loc) => ipcRenderer.invoke('source:open', { cwd, loc }),

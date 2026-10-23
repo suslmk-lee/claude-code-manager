@@ -16,6 +16,7 @@ npm run install-app   # sync-sdk + pack + quit the running copy + replace the in
                       #   (--no-launch to skip launching, --dry-run to print the steps only)
 npm run sync-sdk      # pin the Agent SDK to the installed Claude Code's patch number
 npm run pack:mac / dist:mac / pack:win / dist:win   # explicit per-platform targets
+# every pack/dist (incl. install-app) first runs scripts/bump-version.js: patch +1 in package.json + package-lock.json (--dry-run to preview); start/test never bump
 ```
 
 Install (macOS): drag the .app from the DMG (or `cp -R "dist/mac-arm64/Claude Code Manager.app" /Applications/`).

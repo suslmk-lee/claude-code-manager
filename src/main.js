@@ -101,6 +101,7 @@ ipcMain.handle('chat:close', (_e, key) => chat.close(key));
 ipcMain.handle('chat:list', () => chat.list());
 
 ipcMain.on('wv:preload', (e) => { e.returnValue = 'file://' + path.join(__dirname, 'webview-preload.js'); });
+ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });
 // browser pane screenshots: captured here (the sandboxed renderer has no Buffer for toPNG) and saved under
 // userData/shots so Claude can Read them by path; a small data URL comes back for the chip thumbnail
 ipcMain.handle('shots:capture', async (_e, { wcId, rect, name }) => {

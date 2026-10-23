@@ -1,6 +1,6 @@
 {
   "name": "claude-code-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Desktop manager for Claude Code sessions, memory and stats",
   "main": "src/main.js",
   "private": true,
@@ -10,10 +10,10 @@
     "postinstall": "node scripts/postinstall.js",
     "pack": "node scripts/pack.js",
     "dist": "node scripts/dist.js",
-    "pack:mac": "electron-builder --mac dir",
-    "dist:mac": "electron-builder --mac dmg",
-    "pack:win": "electron-builder --win dir -c.npmRebuild=false",
-    "dist:win": "electron-builder --win nsis -c.npmRebuild=false",
+    "pack:mac": "node scripts/bump-version.js && electron-builder --mac dir",
+    "dist:mac": "node scripts/bump-version.js && electron-builder --mac dmg",
+    "pack:win": "node scripts/bump-version.js && electron-builder --win dir -c.npmRebuild=false",
+    "dist:win": "node scripts/bump-version.js && electron-builder --win nsis -c.npmRebuild=false",
     "icon": "electron build/icon-render.js",
     "install-app": "node scripts/install-app.js",
     "sync-sdk": "node scripts/sync-sdk.js"

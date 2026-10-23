@@ -138,7 +138,7 @@ const outdated = () => S.sessions.filter((s) => s.live && s.kind === 'background
 function renderVersionBar() {
   const bar = $('#version-bar'), old = outdated(), bg = S.sessions.filter((s) => s.live && s.kind === 'background');
   bar.replaceChildren(...[ // native replaceChildren would print a null as "null"
-    el('span', { class: 'msg', text: `Claude Code v${S.cliVersion || '?'} · 실행 중인 bg 세션 ${bg.length}개` }),
+    el('span', { class: 'msg', text: `Manager v${api.appVersion} · Claude Code v${S.cliVersion || '?'} · 실행 중인 bg 세션 ${bg.length}개` }),
     old.length ? el('span', { class: 'pill', text: `구버전 ${old.length}개` }) : null,
     el('button', { class: old.length ? 'primary' : '', text: '모두 재시작 (respawn --all)', disabled: bg.length ? null : 'true', onclick: async () => {
       const names = (old.length ? old : bg).map((s) => `· ${s.name} (v${s.version || '?'})`).join('\n');
@@ -923,6 +923,7 @@ api.onSessionsChanged(loadSessions);
 api.onMemoryChanged(() => { S.memory = null; if (S.view === 'memory') loadMemory(); });
 $('#btn-refresh').onclick = () => { S.memory = null; loadSessions(); if (S.view === 'memory') loadMemory(); };
 const gearMenu = $('#gear-menu'); // hover menu like 세션 ▾: a click on an item shuts it until the pointer leaves
+$('#app-ver').textContent = api.appVersion;
 gearMenu.querySelector('.gear-pop').addEventListener('click', (e) => { if (e.target.closest('button')) { gearMenu.classList.remove('open'); gearMenu.classList.add('closed'); } });
 gearMenu.onmouseleave = () => gearMenu.classList.remove('closed', 'open');
 $('#btn-gear').onclick = () => { gearMenu.classList.remove('closed'); gearMenu.classList.toggle('open'); };

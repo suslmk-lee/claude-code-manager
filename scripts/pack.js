@@ -3,5 +3,7 @@
 const { spawnSync } = require('child_process')
 const args = { darwin: '--mac dir', win32: '--win dir -c.npmRebuild=false' }[process.platform]
 if (!args) { console.error(`pack: unsupported platform ${process.platform}`); process.exit(1) }
+// every build gets its own version (install-app goes through npm run pack, so it bumps once)
+spawnSync('node scripts/bump-version.js', { stdio: 'inherit', shell: true, cwd: require('path').join(__dirname, '..') })
 const r = spawnSync(`electron-builder ${args}`, { stdio: 'inherit', shell: true, cwd: require('path').join(__dirname, '..') })
 process.exit(r.status == null ? 1 : r.status)
