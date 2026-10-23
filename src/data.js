@@ -172,13 +172,57 @@ async function readTailTitle(file, bytes = 65536) {
     return out;
   } catch { return {}; } finally { await fh?.close(); }
 }
-// Account rate-limit usage (5h / 7d) as Claude Code caches it; the user's statusline cache is the fallback.
+// Account rate-limit usage (5h / 7d). Claude Code only writes its cache when /usage is opened, so when that is
+// missing/stale we query the same endpoint ourselves (read-only: never touch Claude Code's files, never refresh tokens).
+let CLAUDE_JSON = path.join(os.homedir(), '.claude.json'); // overridable for tests
+const USAGE_STALE = 300000, USAGE_TTL = 180000;
+const own = { at: 0, body: null, fails: 0, retryAt: 0, inflight: null };
+// Node's http2: the endpoint wants HTTP/2 + a user-agent. Resolves the parsed body; rejects on non-200/timeout.
+function fetchUsage(token) {
+  return new Promise((resolve, reject) => {
+    const http2 = require('http2');
+    const c = http2.connect('https://api.anthropic.com');
+    let done = false;
+    const end = (e, v) => { if (done) return; done = true; clearTimeout(t); try { c.destroy(); } catch { /* closed */ } e ? reject(e) : resolve(v); };
+    const t = setTimeout(() => end(new Error('timeout')), 15000);
+    c.on('error', end);
+    const req = c.request({ ':method': 'GET', ':path': '/api/oauth/usage', authorization: 'Bearer ' + token, 'anthropic-beta': 'oauth-2025-04-20', 'anthropic-version': '2023-06-01', 'user-agent': 'claude-code-manager/' + require('../package.json').version, accept: 'application/json' });
+    let status = 0, buf = '';
+    req.setEncoding('utf8');
+    req.on('response', (h) => { status = h[':status']; });
+    req.on('data', (d) => { buf += d; });
+    req.on('error', end);
+    req.on('end', () => { try { status === 200 ? end(null, JSON.parse(buf)) : end(new Error('http ' + status)); } catch (e) { end(e); } });
+    req.end();
+  });
+}
+let usageFetcher = fetchUsage;
+async function ownUsage() {
+  if (own.body && Date.now() - own.at < USAGE_TTL) return own.body;
+  if (Date.now() < own.retryAt) return null;
+  const cred = (await readJson(path.join(HOME, '.credentials.json'), null))?.claudeAiOauth; // absent on macOS (Keychain) → no fetch
+  if (!cred?.accessToken || !(cred.expiresAt > Date.now())) return null;
+  own.inflight ||= (async () => {
+    try {
+      const b = await usageFetcher(cred.accessToken);
+      if (!b || b.error || !b.five_hour) throw new Error('bad body');
+      Object.assign(own, { at: Date.now(), body: b, fails: 0, retryAt: 0 });
+    } catch {
+      own.fails++; own.retryAt = Date.now() + Math.min(60, 5 * 2 ** (own.fails - 1)) * 60000; // 5 → 10 → 20 → … max 60 min
+    } finally { own.inflight = null; }
+  })();
+  await own.inflight;
+  return own.body && Date.now() - own.at < USAGE_TTL ? own.body : null;
+}
 async function usage() {
   // scoped limits (e.g. a per-model weekly cap such as Fable) ride along in `limits`; the status-line cache fallback has none
   const scoped = (u) => (Array.isArray(u?.limits) ? u.limits : []).filter((l) => l.scope?.model?.display_name && typeof l.percent === 'number').map((l) => ({ name: l.scope.model.display_name, group: l.group || l.kind, pct: l.percent, resetsAt: l.resets_at || null, active: !!l.is_active }));
   const pick = (u, at) => u?.five_hour ? { fetchedAt: at || null, fiveHour: { pct: u.five_hour.utilization, resetsAt: u.five_hour.resets_at }, sevenDay: { pct: u.seven_day?.utilization, resetsAt: u.seven_day?.resets_at }, scoped: scoped(u) } : null;
-  const cfg = await readJson(path.join(os.homedir(), '.claude.json'), null);
-  return pick(cfg?.cachedUsageUtilization?.utilization, cfg?.cachedUsageUtilization?.fetchedAtMs)
+  const cfg = await readJson(CLAUDE_JSON, null);
+  const cc = pick(cfg?.cachedUsageUtilization?.utilization, cfg?.cachedUsageUtilization?.fetchedAtMs);
+  if (cc && Date.now() - cc.fetchedAt < USAGE_STALE) return cc;
+  const mine = await ownUsage();
+  return (mine && pick(mine, own.at)) || cc
     || pick(await readJson(path.join(HOME, 'statusline_cache.json'), null), null);
 }
 // Logged-in account: the profile Claude Code stores after login, plus `claude auth status` (cached 5 min).
@@ -804,5 +848,5 @@ async function newSession(opts) {
 module.exports = {
   IS_WIN, HOME, PROJECTS, env, findClaude, profiles: listProfiles, launcher, encodeProject, parseFrontmatter, ingest, emptyStats,
   listSessions, listAgents, sessionStats, fileStats, globalStats, readPins, setPinned, listProjects, transcript, searchTranscripts, findTranscript, streamLines, ingestTurn, readTailTitle, usage, gitInfo, account, listMemory, readMemory, copyMemory, writeMemory, deleteMemory, createMemory, MEMORY_TYPES,
-  scanWorkspace, agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; },
+  scanWorkspace, agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; }, setClaudeJson: (p) => { CLAUDE_JSON = p; }, setUsageFetcher: (f) => { usageFetcher = f || fetchUsage; Object.assign(own, { at: 0, body: null, fails: 0, retryAt: 0, inflight: null }); },
 };

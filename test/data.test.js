@@ -11,6 +11,7 @@ process.env.CLAUDE_CONFIG_DIR = tmp;
 process.env.CLAUDE_BIN = '/bin/false'; // no real CLI in tests → listAgents() returns []
 const data = require('../src/data');
 data.setCacheDir(path.join(tmp, 'cache'));
+data.setClaudeJson(path.join(tmp, 'dot-claude.json')); // never read the real ~/.claude.json
 
 const projA = path.join(tmp, 'projects', '-tmp-a'), projB = path.join(tmp, 'projects', '-tmp-b');
 fs.mkdirSync(path.join(projA, 'memory'), { recursive: true });
@@ -381,4 +382,34 @@ test('renderer: no mid-line // comment swallows the handlers after it (tabs lost
       assert.ok(!/\/\/.*\b(?:on[a-z]+|'data-[a-z]+')\s*:\s*[`'"(]/.test(line), `${f}:${i + 1} has a handler after a // comment`);
     });
   }
+});
+
+test('usage: own fetch when the Claude Code cache is missing/stale', async () => {
+  const cj = path.join(tmp, 'dot-claude.json'), cred = path.join(tmp, '.credentials.json'), sl = path.join(tmp, 'statusline_cache.json');
+  const body = { five_hour: { utilization: 10, resets_at: 'r1' }, seven_day: { utilization: 20, resets_at: 'r2' }, limits: [{ scope: { model: { display_name: 'Fable' } }, percent: 78, kind: 'weekly', is_active: true }] };
+  const cc = (ms, pct) => fs.writeFileSync(cj, JSON.stringify({ cachedUsageUtilization: { fetchedAtMs: ms, utilization: { five_hour: { utilization: pct }, seven_day: { utilization: pct } } } }));
+  const creds = (exp) => fs.writeFileSync(cred, JSON.stringify({ claudeAiOauth: { accessToken: 'tok', expiresAt: exp } }));
+  let calls = 0, fail = false;
+  const reset = () => { calls = 0; fail = false; data.setUsageFetcher(async (t) => { calls++; assert.equal(t, 'tok'); if (fail) throw new Error('429'); return body; }); };
+  const rm = (f) => fs.rmSync(f, { force: true });
+
+  reset(); rm(cj); rm(cred); rm(sl);
+  assert.equal(await data.usage(), null); assert.equal(calls, 0); // no credentials → no fetch
+
+  reset(); cc(Date.now(), 5); creds(Date.now() + 3600e3);
+  assert.equal((await data.usage()).fiveHour.pct, 5); assert.equal(calls, 0); // fresh CC cache wins
+
+  reset(); cc(Date.now() - 10 * 60e3, 5);
+  let u = await data.usage();
+  assert.equal(calls, 1); assert.equal(u.fiveHour.pct, 10); assert.deepEqual(u.scoped.map((s) => [s.name, s.pct]), [['Fable', 78]]);
+  await data.usage(); assert.equal(calls, 1); // own result cached
+
+  reset(); creds(Date.now() - 1000); // expired token
+  u = await data.usage(); assert.equal(calls, 0); assert.equal(u.fiveHour.pct, 5); // stale CC cache
+
+  reset(); creds(Date.now() + 3600e3); fail = true; rm(cj);
+  fs.writeFileSync(sl, JSON.stringify({ five_hour: { utilization: 33 }, seven_day: { utilization: 44 } }));
+  u = await data.usage(); assert.equal(calls, 1); assert.equal(u.fiveHour.pct, 33); // error → statusline fallback
+  await data.usage(); assert.equal(calls, 1); // backoff: no second request
+  rm(sl); rm(cred); data.setUsageFetcher(null);
 });
