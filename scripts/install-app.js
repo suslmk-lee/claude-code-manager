@@ -3,7 +3,7 @@
 //   macOS:   /Applications/Claude Code Manager.app          (install-app.sh logic, ported)
 //   Windows: %LOCALAPPDATA%\Programs\Claude Code Manager    + Start Menu shortcut
 // --dry-run prints the steps without running or touching anything.
-const { spawnSync, execFileSync } = require('child_process')
+const { spawn, spawnSync, execFileSync } = require('child_process')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -13,6 +13,16 @@ const argv = process.argv.slice(2)
 const launch = !argv.includes('--no-launch')
 const dry = argv.includes('--dry-run')
 const NAME = 'Claude Code Manager'
+
+// Windows: run detached. Started from the app's own terminal (or by a Claude session it hosts), quitting the app kills
+// this script with it, mid-install; a detached copy outlives the app and relaunches the installed one. Output → log file.
+if (process.platform === 'win32' && !dry && !process.env.CCM_INSTALL_CHILD) {
+  const log = path.join(os.tmpdir(), 'ccm-install-app.log')
+  const fd = fs.openSync(log, 'w')
+  spawn(process.execPath, [__filename, ...argv], { cwd: root, detached: true, windowsHide: true, stdio: ['ignore', fd, fd], env: { ...process.env, CCM_INSTALL_CHILD: '1' } }).unref()
+  console.log(`install-app continues in the background (quits and relaunches the app) · log: ${log}`)
+  process.exit(0)
+}
 
 const say = (m) => console.log(dry ? `[dry-run] ${m}` : m)
 // shell:true for npm.cmd; every command string below is built from fixed text and resolved paths
@@ -36,7 +46,21 @@ function dirSize(p) {
 }
 const human = (n) => n >= 2 ** 30 ? (n / 2 ** 30).toFixed(1) + 'G' : (n / 2 ** 20).toFixed(0) + 'M'
 
+// Windows: a copy running from dist\win-unpacked (or the install dir) locks its files, so it quits before the pack, not after
+const winImage = `${NAME}.exe`
+const winRunning = () => (spawnSync(`tasklist /FI "IMAGENAME eq ${winImage}" /NH`, { shell: true, encoding: 'utf8' }).stdout || '').includes(winImage)
+function winQuit() {
+  say(`taskkill /IM "${winImage}" (graceful), /F after 5s if still running`)
+  if (dry || !winRunning()) return
+  console.log('quitting running app…')
+  quiet(`taskkill /IM "${winImage}"`)
+  for (let i = 0; i < 5 && winRunning(); i++) sleep(1000)
+  if (winRunning()) quiet(`taskkill /F /IM "${winImage}"`)
+  sleep(500)   // let Windows release file handles before dist / the install dir is replaced
+}
+
 must(sh('node scripts/sync-sdk.js'), 'sync-sdk')   // SDK patch number follows the installed Claude Code
+if (process.platform === 'win32') winQuit()
 must(sh('npm run pack'), 'pack')
 
 if (process.platform === 'darwin') {
@@ -60,17 +84,7 @@ if (process.platform === 'darwin') {
   const DEST = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Programs', NAME)
   const LNK = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${NAME}.lnk`)
   const EXE = path.join(DEST, `${NAME}.exe`)
-  const image = `${NAME}.exe`
-  const running = () => (spawnSync(`tasklist /FI "IMAGENAME eq ${image}" /NH`, { shell: true, encoding: 'utf8' }).stdout || '').includes(image)
-
-  say(`taskkill /IM "${image}" (graceful), /F after 5s if still running`)
-  if (!dry && running()) {
-    console.log('quitting running app…')
-    quiet(`taskkill /IM "${image}"`)
-    for (let i = 0; i < 5 && running(); i++) sleep(1000)
-    if (running()) quiet(`taskkill /F /IM "${image}"`)
-    sleep(500)   // let Windows release file handles before the dir is replaced
-  }
+  winQuit()   // again: started during the pack
   say(`replace ${DEST} with a copy of ${SRC}`)
   if (!dry) {
     if (!fs.existsSync(SRC)) { console.error(`missing ${SRC}`); process.exit(1) }
