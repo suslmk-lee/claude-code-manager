@@ -156,7 +156,7 @@ function renderTabs() {
       ondragleave: () => t.classList.remove('drop-before', 'drop-after'),
       ondrop: (e) => { e.preventDefault(); e.stopPropagation(); moveTab(S.dragTab, s.sessionId, t.classList.contains('drop-after')); },
       ondragend: () => { S.dragTab = null; renderTabs(); } },
-      el('span', { class: 'glyph ' + st, text: s.live || s.local ? '✱' : '•' }),
+      el('span', { class: `glyph ${st} ${s.live || s.local ? 'live' : 'off'}` }),
       el('span', { class: 'label', text: s.name }),
       profileBadge(s),
       S.unseen.has(s.sessionId) ? el('span', { class: 'pill', text: '입력' }) : null,
@@ -239,7 +239,7 @@ function sessionRow(s) {
   const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
   const detail = s.job?.needs || s.job?.detail || s.lastPrompt || s.job?.intent || '';
   return el('div', { class: 'sess' + (s.sessionId === S.sel ? ' sel' : ''), 'data-tip': `${shortPath(s.cwd)}\n${detail}`, onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s) },
-    el('span', { class: 'name' }, el('span', { class: 'glyph ' + st, text: s.live ? '✱' : '•' }), s.name, profileBadge(s)),
+    el('span', { class: 'name' }, el('span', { class: `glyph ${st} ${s.live ? 'live' : 'off'}` }), s.name, profileBadge(s)),
     el('span', { class: 'detail', text: detail }),
     el('span', { class: 'links', text: linksLabel(s.job) }),
     el('span', { class: 'age', text: fmtAgo(s.lastActivity) }));
@@ -422,6 +422,7 @@ function resyncViewport(term) {
   term.scrollToLine(y);
 }
 function showTerminal(s, pane) {
+  if (s.starting) { pane.append(el('div', { class: 'starting' }, el('span', { class: 'spin' }), el('span', { text: `"${s.name}" 세션을 시작하는 중… (claude --bg${s.profile !== 'default' ? ` · ${s.profile}` : ''})` }))); return; }
   let t = S.terms.get(s.sessionId);
   if (!t) { t = createTerm(s); S.terms.set(s.sessionId, t); }
   pane.append(t.bar, t.box);
@@ -680,11 +681,41 @@ $('#btn-new').onclick = () => {
   const ps = $('#new-profile');
   ps.replaceChildren(...S.profiles.map((p) => el('option', { value: p.id === 'default' ? '' : p.id, text: p.id === 'default' ? 'Claude (기본 · ~/.claude)' : `${p.name}${p.model ? ` · ${p.model}` : ''} (${shortPath(p.dir)})` })));
   ps.closest('label').hidden = S.profiles.length < 2; // one profile: nothing to choose
-  try { const last = JSON.parse(localStorage.getItem('newSessionOpts') || '{}'); for (const [k, sel] of Object.entries(OPTS)) $(sel).value = last[k] || ''; } catch { /* no saved options */ }
+  let last = {};
+  try { last = JSON.parse(localStorage.getItem('newSessionOpts') || '{}'); for (const [k, sel] of Object.entries(OPTS)) $(sel).value = last[k] || ''; } catch { /* no saved options */ }
   if (cur()?.profile && cur().profile !== 'default') ps.value = cur().profile; // follow the session you are looking at
+  // a remembered model must not leak into another profile: `--model` would override that profile's own model
+  if ((last.profile || '') !== ps.value) $('#new-model').value = '';
+  modelHint();
+  if (ps.value && isAnthropicModel($('#new-model').value)) $('#new-model').value = ''; // a Claude model name saved with a gateway profile (an older leak)
   dlg.showModal();
 };
 $('#new-pick').onclick = async () => { const d = await api.pickDir(); if (d) $('#new-cwd').value = d; };
+// the model field is per profile: switching profiles clears it, the placeholder names what an empty field means, and the
+// list offers that profile's models — the default profile's aliases (the datalist in index.html) or the other profile's
+// settings.json model — plus the models its sessions have actually used (from the stats, fetched once per profile).
+const seenModels = new Map(); // profile id → models seen in its transcripts, most used first
+function applyModelOptions() {
+  const id = $('#new-profile').value || 'default', inp = $('#new-model'), p = S.profiles.find((x) => x.id === id);
+  if (!inp.__aliases) inp.__aliases = (inp.__opts || []).map((o) => o.value); // what select.js read from the datalist
+  if (!seenModels.has(id)) {
+    seenModels.set(id, []);
+    api.globalStats({ profile: id }).then((g) => { seenModels.set(id, Object.entries(g.byModel || {}).filter(([m]) => m !== '<synthetic>').sort((a, b) => b[1].output - a[1].output).map(([m]) => m)); if (($('#new-profile').value || 'default') === id) applyModelOptions(); }).catch(() => {});
+  }
+  const base = id === 'default' ? inp.__aliases : [p?.model].filter(Boolean);
+  inp.__opts = [...new Set([...base, ...seenModels.get(id)])].map((v) => ({ value: v, text: v }));
+}
+const isAnthropicModel = (m) => !!m && (/^claude-/.test(m) || ($('#new-model').__aliases || []).includes(m));
+function modelHint() {
+  const id = $('#new-profile').value || 'default', p = S.profiles.find((x) => x.id === id), other = id !== 'default';
+  $('#new-model').placeholder = other ? `비워 두면 프로파일 모델 (${p?.model || '설정값'})` : '기본값 (settings.json)';
+  applyModelOptions();
+  // effort is an Anthropic-model setting (thinking budget): meaningless for a gateway profile's model, so it is left off
+  const eff = $('#new-effort'); eff.disabled = other; if (other) eff.value = '';
+  eff.closest('label').classList.toggle('off', other);
+  eff.closest('label').title = other ? `${p?.model || '이 프로파일의 모델'}에는 effort 설정이 적용되지 않습니다` : '';
+}
+$('#new-profile').onchange = () => { $('#new-model').value = ''; modelHint(); };
 dlg.onclose = async () => {
   if (dlg.returnValue !== 'ok') return;
   const cwd = $('#new-cwd').value, name = $('#new-name').value.trim(), prompt = $('#new-prompt').value.trim();
@@ -692,13 +723,19 @@ dlg.onclose = async () => {
   const { mode, ...opts } = readOpts();
   try { localStorage.setItem('newSessionOpts', JSON.stringify({ ...opts, mode })); } catch { /* fine */ }
   if (mode === 'chat') { newChatTab({ cwd, name, prompt, opts }); return; }
+  // instant feedback: a placeholder tab while `claude --bg` boots the worker (≈1–3 s), swapped for the real session
+  const ph = { sessionId: 'starting-' + Date.now(), local: true, starting: true, name: name || baseName(cwd), cwd, profile: opts.profile || 'default' };
+  S.local.push(ph); S.tab = 'terminal'; openSession(ph.sessionId);
+  const dropPlaceholder = (replaceWith) => { const i = S.tabs.indexOf(ph.sessionId); S.local = S.local.filter((x) => x !== ph); if (replaceWith && i !== -1) S.tabs[i] = replaceWith; else S.tabs = S.tabs.filter((x) => x !== ph.sessionId); if (S.sel === ph.sessionId) S.sel = replaceWith || S.tabs[0] || null; };
   const r = await api.newSession({ cwd, name, prompt, ...opts }).catch((e) => ({ ok: false, output: e.message }));
   if (r.ok) {
     await loadSessions();
     const s = S.sessions.find((x) => x.short === r.id);
-    if (s) { S.tab = 'terminal'; openSession(s.sessionId); }
+    dropPlaceholder(s?.sessionId);
+    if (s) { S.tab = 'terminal'; openSession(s.sessionId); } else { renderSessionList(); renderTabs(); renderDetail(); }
     return;
   }
+  dropPlaceholder(); renderSessionList(); renderTabs(); renderDetail();
   if (!r.untrusted) return alert(r.output || '세션 생성 실패');
   // Untrusted folder: open claude interactively in our terminal so the trust prompt can be answered.
   const flags = Object.entries({ name, ...opts }).flatMap(([k, v]) => { const f = { name: '--name', model: '--model', effort: '--effort', permissionMode: '--permission-mode', agent: '--agent' }[k]; return v && f ? [f, v] : []; });
@@ -729,7 +766,8 @@ function showCtx(e, s) {
     bg ? item('재시작 (respawn)', () => act('respawn', s)) : null,
     el('div', { class: 'sep' }),
     S.tabs.includes(s.sessionId) ? item('탭 닫기', () => closeTab(s.sessionId)) : null,
-    s.local || (s.live && !bg) ? null : item('삭제…', () => deleteFlow(s), 'danger'),
+    s.local || (s.live && !bg) ? null : item(bg ? '세션 삭제… (대화 기록은 유지)' : '트랜스크립트 삭제…', () => deleteFlow(s), 'danger'),
+    bg && s.file && !s.local ? item('완전 삭제… (세션 + 대화 기록)', () => deleteFlow(s, { purge: true }), 'danger') : null,
   ];
   ctx.replaceChildren(...items.filter(Boolean));
   ctx.classList.remove('hidden');
@@ -765,12 +803,14 @@ function renameFlow(s) {
   dlgRename.showModal();
   $('#rename-name').select();
 }
-async function deleteFlow(s) {
+async function deleteFlow(s, { purge = false } = {}) {
   if (s.kind === 'background') {
-    if (!confirm(`"${s.name}" 백그라운드 세션을 삭제할까요?${s.live ? ' (실행 중이라 먼저 중지합니다)' : ''}\n트랜스크립트는 남습니다.`)) return;
+    const what = purge ? '세션과 대화 기록(트랜스크립트)을 모두 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.' : '백그라운드 세션을 삭제할까요?\n대화 기록(트랜스크립트)은 남아 「트랜스크립트만」 그룹에서 다시 이어갈 수 있습니다.';
+    if (!confirm(`"${s.name}" ${s.live ? '(실행 중이라 먼저 중지합니다) ' : ''}${what}`)) return;
     if (s.live) await api.agentAction('stop', s.short, s.profile);
     const r = await api.agentAction('rm', s.short, s.profile);
-    if (!r.ok) alert(r.output || 'rm 실패');
+    if (!r.ok) { alert(r.output || 'rm 실패'); return; }
+    if (purge && s.file) await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));
   } else {
     if (!confirm(`"${s.name}" 의 트랜스크립트(${fmtBytes(s.size)})를 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.`)) return;
     await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));

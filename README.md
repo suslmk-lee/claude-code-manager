@@ -66,6 +66,10 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   swatches: 기본 그라파이트 (주황/파랑/초록), 모노크롬, Dracula, Nord, Tokyo Night, Catppuccin Mocha, Gruvbox, Rosé Pine,
   Solarized Dark, and light ones (라이트, Solarized Light, Catppuccin Latte). A theme sets ~12 base colours; buttons,
   hovers, selections and borders are derived with CSS color-mix. The 기본 terminal theme follows the app background.
+- **Deleting sessions (right-click)** — a background session offers 세션 삭제 (removes the daemon's job; the transcript
+  stays and the session reappears under 트랜스크립트만, resumable) and 완전 삭제 (job + transcript, gone for good); a
+  transcript-only session offers 트랜스크립트 삭제. Running sessions are stopped first; interactive sessions open in
+  another terminal cannot be deleted from here.
 - **Terminal look (모양 button in the terminal bar)** — a theme gallery with preview swatches (Dracula, One Dark,
   Tokyo Night, Catppuccin, Nord, Gruvbox, Solarized, Flexoki, Kanagawa, Everforest, Night Owl, Rosé Pine, Cobalt2,
   Octocat, Hacker …) and a font picker: installed monospace families are detected (canvas width probe), any other

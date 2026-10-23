@@ -59,10 +59,10 @@ header button.icon { padding:6px 8px; } header button.icon svg { width:15px; hei
 .tab.dragging { opacity:.35; }
 .tab.drop-before { box-shadow:-3px 0 0 var(--acc); }
 .tab.drop-after { box-shadow:3px 0 0 var(--acc); }
-.tab { display:flex; align-items:center; gap:6px; padding:5px 8px 5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--tab); color:var(--dim); cursor:pointer; white-space:nowrap; max-width:200px; font-size:12.5px; }
+.tab { display:flex; align-items:center; gap:6px; padding:5px 8px 5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--tab); color:var(--dim); cursor:pointer; white-space:nowrap; flex:0 1 auto; min-width:100px; max-width:200px; font-size:12.5px; } /* shrink to 100px (half) before the strip starts scrolling */
 .tab:hover { color:var(--fg); }
 .tab.active { background:var(--bg); color:var(--fg); border-color:var(--acc); }
-.tab .label { overflow:hidden; text-overflow:ellipsis; }
+.tab .label { overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto; }
 .pbadge { display:inline-block; font-size:10px; font-weight:600; line-height:1.4; padding:0 5px; margin-left:6px; border-radius:6px; background:color-mix(in srgb, var(--warn) 22%, var(--panel)); color:var(--warn); vertical-align:1px; white-space:nowrap; } /* session from another profile (config dir) */
 .tab .x { color:var(--dim); padding:0 2px; border-radius:4px; line-height:1; }
 .tab .x:hover { background:var(--sel); color:var(--fg); }
@@ -82,6 +82,9 @@ input, select, textarea { background:var(--field); color:var(--fg); border:1px s
 /* selects: themed chevron on the closed control (the open list is drawn by select.js) */
 select { appearance:none; -webkit-appearance:none; padding-right:30px; cursor:pointer; background-image:linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%); background-position:calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; transition:border-color .15s, box-shadow .15s; }
 select:hover { border-color:color-mix(in srgb, var(--line) 50%, var(--dim)); }
+select:disabled { opacity:.45; cursor:default; } label.off { color:var(--dim); }
+input.combo { padding-right:30px; background-image:linear-gradient(45deg, transparent 50%, var(--dim) 50%), linear-gradient(135deg, var(--dim) 50%, transparent 50%); background-position:calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size:5px 5px, 5px 5px; background-repeat:no-repeat; }
+.dd-opt.dd-clear { color:var(--dim); font-style:italic; }
 select:focus-visible { outline:none; border-color:var(--acc); box-shadow:0 0 0 3px color-mix(in srgb, var(--acc) 30%, transparent); }
 .dd { position:fixed; z-index:80; min-width:160px; max-height:320px; overflow:auto; padding:4px; background:var(--panel); border:1px solid var(--line); border-radius:9px; box-shadow:0 14px 36px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.04); animation:dd-in .12s ease-out; }
 .dd-opt { position:relative; padding:6px 12px 6px 28px; border-radius:6px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
@@ -102,12 +105,21 @@ section { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hid
 .sess:hover { background:var(--hover); }
 .sess.sel { background:var(--sel); }
 .sess > span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.sess .name { font-weight:600; }
+.sess .name { font-weight:600; padding:7px 0 7px 9px; margin:-7px 0 -7px -9px; } /* the cell clips overflow (ellipsis); this inner padding keeps the dot's halo and ripple inside it */
 .sess .detail, .sess .age { color:var(--dim); }
 .sess .age { text-align:right; font-variant-numeric:tabular-nums; }
 .sess .links { color:var(--acc); font-size:11px; }
-.glyph { display:inline-block; width:1.2em; color:var(--dim); }
-.glyph.busy, .glyph.working { color:var(--acc); }
+/* session state dot: colour = state; solid with a soft halo = running, hollow ring = not running;
+   a thin ripple spreads while a running session works, slower while it waits for input */
+.glyph { position:relative; display:inline-block; width:8px; height:8px; border-radius:50%; color:var(--dim); background:currentColor; flex:none; vertical-align:middle; margin:-1px 8px 0 0; }
+#tabs .glyph { margin-right:2px; }
+.glyph.idle, .glyph.done { color:var(--ok); } .glyph.busy, .glyph.working { color:var(--acc); } .glyph.blocked { color:var(--warn); }
+.glyph.live { box-shadow:0 0 0 2.5px color-mix(in srgb, currentColor 22%, transparent); }
+.glyph.off { background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb, currentColor 80%, transparent); }
+.glyph.live.busy::after, .glyph.live.working::after, .glyph.live.blocked::after { content:''; position:absolute; inset:-1px; border-radius:50%; border:1.5px solid currentColor; animation:ripple 2s cubic-bezier(.2,.6,.3,1) infinite; }
+.glyph.live.blocked::after { animation-duration:2.8s; }
+@keyframes ripple { 0% { transform:scale(.8); opacity:.75; } 75% { transform:scale(2.6); opacity:0; } 100% { transform:scale(2.6); opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .glyph::after { animation:none; display:none; } }
 .glyph.idle, .glyph.done { color:var(--ok); }
 .glyph.blocked { color:var(--warn); }
 
@@ -156,6 +168,9 @@ body.resizing { cursor:ns-resize; user-select:none; }
 .shell-title { color:var(--fg); font-weight:600; margin-right:2px; }
 .pane { flex:1; min-height:0; overflow:auto; padding:14px; }
 .pane.term { padding:6px; display:flex; flex-direction:column; background:var(--term-bg, var(--bg)); }
+.starting { margin:auto; display:flex; gap:10px; align-items:center; color:var(--dim); font-size:13px; }
+.starting .spin { width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--acc); border-radius:50%; animation:ccm-spin .8s linear infinite; }
+@keyframes ccm-spin { to { transform:rotate(360deg); } }
 .term-box { flex:1; min-height:0; }
 .term-bar { display:flex; gap:8px; align-items:center; padding:4px 6px; color:var(--dim); font-size:11px; }
 .term-bar .look-btn { margin-left:auto; padding:3px 9px; font-size:11px; }
