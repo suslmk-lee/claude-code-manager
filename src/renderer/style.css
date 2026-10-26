@@ -271,6 +271,11 @@ svg.heat .l4, .heat-l4 { fill:var(--acc); background:var(--acc); }
 .ws-root .x { padding:0 4px; border:none; background:transparent; box-shadow:none; color:var(--dim); } .ws-root .x:hover { color:var(--bad); }
 .ws-cat { margin-bottom:18px; }
 .ws-cat h3 { margin:0 0 8px; font-size:14px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.ws-cat-title { align-items:center; font-size:16px; font-weight:650; letter-spacing:-.2px; }
+.ws-cat-ico { display:inline-flex; width:18px; height:18px; color:var(--cat, var(--acc)); } .ws-cat-ico svg { width:18px; height:18px; fill:color-mix(in srgb, currentColor 25%, transparent); stroke:currentColor; stroke-width:1.6; stroke-linejoin:round; }
+.ws-cat-name { color:var(--fg); }
+.ws-own-row .ws-card { border-left:3px solid var(--cat, var(--acc)); }
+.ws-tile .n { color:var(--cat, var(--fg)); }
 .ws-cat h3 .ws-path { margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:11px; }
 .ws-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:10px; }
 .ws-card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }

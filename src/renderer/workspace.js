@@ -78,8 +78,8 @@ function wsSection(title, dir, entries, ctx, pseudo = false) {
   const cards = entries.map((e) => { const ss = pseudo ? e.sessions : (ctx.bySessions.get(e.path) || []); return { e, ss, last: ss.reduce((m, s) => Math.max(m, s.lastActivity || 0), 0) }; })
     .sort((a, b) => (b.ss.length ? 1 : 0) - (a.ss.length ? 1 : 0) || b.last - a.last || a.e.name.localeCompare(b.e.name));
   const live = cards.reduce((n, c) => n + c.ss.filter((s) => s.live).length, 0), total = cards.reduce((n, c) => n + c.ss.length, 0);
-  return el('div', { class: 'ws-cat' },
-    el('h3', {}, title, el('span', { class: 'msg', text: ` · 폴더 ${fmtN(cards.length)} · 세션 ${fmtN(total)}${live ? ` · 실행 중 ${live}` : ''}` }), dir ? el('span', { class: 'msg ws-path', text: dir }) : null),
+  return el('div', { class: 'ws-cat', style: `--cat:${catColor(title)}` },
+    el('h3', { class: 'ws-cat-title' }, folderIcon(), el('span', { class: 'ws-cat-name', text: title }), el('span', { class: 'msg', text: ` · 폴더 ${fmtN(cards.length)} · 세션 ${fmtN(total)}${live ? ` · 실행 중 ${live}` : ''}` }), dir ? el('span', { class: 'msg ws-path', text: dir }) : null),
     el('div', { class: 'ws-grid' }, ...cards.map((c, i) => { const k = wsCard(c.e, c.ss, ctx.memByCwd, ctx.tokByCwd); k.style.setProperty('--i', i); return k; })));
 }
 // a category folder: its own card (sessions running right in it) and its subfolders folded into one line — subfolders
@@ -101,12 +101,17 @@ function wsCategory(e, own, kids, ctx) {
     withS.length ? el('div', { class: 'ws-grid' }, ...withS.map((x, i) => { const c = wsCard(x.k, x.ss, ctx.memByCwd, ctx.tokByCwd); c.style.setProperty('--i', i); return c; })) : null,
     empty.length ? el('div', { class: 'ws-chips' }, ...empty.map((k) => el('button', { class: 'ws-chip', 'data-tip': `${k.path}${k.kind === 'dir' ? '\n(저장소 표식 없음)' : ''}`, onclick: () => { setView('sessions'); openNewSession(k.path); } }, k.name, el('span', { class: 'ws-chip-branch', 'data-path': k.path })))) : null) : null;
   if (sub) sub.querySelectorAll('.ws-chip-branch').forEach((b) => api.gitInfo(b.dataset.path).then((g) => { if (g) b.textContent = ` ${g.branch}${g.dirty ? '*' : ''}`; }).catch(() => {}));
-  const ownCard = own.length ? wsCard({ name: `${e.name} (이 폴더)`, path: e.path, kind: 'self' }, own, ctx.memByCwd, ctx.tokByCwd) : null;
-  node = el('div', { class: 'ws-cat' },
-    el('h3', {}, e.name, el('span', { class: 'msg', text: ` · 세션 ${fmtN(own.length + subN)}${own.length ? ` (이 폴더 ${own.length})` : ''}` }), el('span', { class: 'msg ws-path', text: e.path })),
+  // the folder's own card is titled by its latest session, not by the folder (the heading already says that)
+  const latestOwn = [...own].sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))[0];
+  const ownCard = own.length ? wsCard({ name: latestOwn.name, path: e.path, kind: 'self' }, own, ctx.memByCwd, ctx.tokByCwd) : null;
+  node = el('div', { class: 'ws-cat', style: `--cat:${catColor(e.name)}` },
+    el('h3', { class: 'ws-cat-title' }, folderIcon(), el('span', { class: 'ws-cat-name', text: e.name }), el('span', { class: 'msg', text: ` · 세션 ${fmtN(own.length + subN)}` }), el('span', { class: 'msg ws-path', text: e.path })),
     el('div', { class: 'ws-own-row' }, ownCard, toggle), sub);
   return node;
 }
+// each category gets a stable colour from its name: the icon, the own card's edge and the tile's number share it
+const catColor = (name) => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${h % 360} 58% 62%)`; };
+const folderIcon = () => { const w = document.createElement('span'); w.className = 'ws-cat-ico'; w.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>'; return w; };
 const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';
 function wsCard(e, ss, memByCwd, tokByCwd) {
   const open = WS.open.has(e.path);
