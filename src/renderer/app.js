@@ -142,7 +142,7 @@ function renderVersionBar() {
     old.length ? el('span', { class: 'pill', text: `구버전 ${old.length}개` }) : null,
     el('button', { class: old.length ? 'primary' : '', text: '모두 재시작 (respawn --all)', disabled: bg.length ? null : 'true', onclick: async () => {
       const names = (old.length ? old : bg).map((s) => `· ${s.name} (v${s.version || '?'})`).join('\n');
-      if (!confirm(`실행 중인 백그라운드 세션을 모두 현재 Claude Code v${S.cliVersion}로 재시작할까요?\n대화는 그대로 이어지고, 붙어 있던 터미널은 떨어졌다가 다시 붙을 수 있습니다.\n\n${names}`)) return;
+      if (!(await askConfirm(`실행 중인 백그라운드 세션을 모두 현재 Claude Code v${S.cliVersion}로 재시작할까요?\n대화는 그대로 이어지고, 붙어 있던 터미널은 떨어졌다가 다시 붙을 수 있습니다.\n\n${names}`, { title: '모두 재시작', ok: '재시작', danger: false }))) return;
       const r = await api.respawnAll();
       if (!r.ok) alert(r.output || 'respawn 실패');
       setTimeout(loadSessions, 1500);
@@ -159,8 +159,9 @@ function renderTabs() {
   $('#tabs').replaceChildren(...S.tabs.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean).map((s) => {
     const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
     const n = S.tabs.indexOf(s.sessionId) + 1;
-    const t = el('div', { class: 'tab' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true',
-      onmouseenter: (e) => { const l = e.currentTarget.querySelector('.label'); const over = l.scrollWidth - l.clientWidth; if (over > 4) { l.style.setProperty('--shift', `-${over}px`); l.style.setProperty('--dur', `${Math.max(2.5, over / 30)}s`); l.classList.add('marquee'); } else l.classList.remove('marquee'); }, // a cut-off name drifts to show the rest while hovered 'data-tip': `${n <= 9 ? `${kbd('⌘' + n)} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
+    const t = el('div', { class: 'tab glass' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true',
+      // a cut-off name drifts to show the rest while hovered
+      onmouseenter: (e) => { const l = e.currentTarget.querySelector('.label'); const over = l.scrollWidth - l.clientWidth; if (over > 4) { l.style.setProperty('--shift', `-${over}px`); l.style.setProperty('--dur', `${Math.max(2.5, over / 30)}s`); l.classList.add('marquee'); } else l.classList.remove('marquee'); }, 'data-tip': `${n <= 9 ? `${kbd('⌘' + n)} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
       // drag to reorder: native HTML5 DnD; the half of the target the pointer is over decides before/after
       ondragstart: (e) => { S.dragTab = s.sessionId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.sessionId); setTimeout(() => t.classList.add('dragging')); },
       ondragover: (e) => { if (!S.dragTab || S.dragTab === s.sessionId) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const r = t.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2; t.classList.toggle('drop-after', after); t.classList.toggle('drop-before', !after); },
@@ -168,7 +169,7 @@ function renderTabs() {
       ondrop: (e) => { e.preventDefault(); e.stopPropagation(); moveTab(S.dragTab, s.sessionId, t.classList.contains('drop-after')); },
       ondragend: () => { S.dragTab = null; renderTabs(); } },
       el('span', { class: `glyph ${st} ${s.live || s.local ? 'live' : 'off'}` }),
-      el('span', { class: 'label', text: s.name }),
+      el('span', { class: 'label' }, el('span', { class: 'txt', text: s.name })), // inner span: the marquee moves it with transform, so the tab's width never follows
       profileBadge(s),
       S.unseen.has(s.sessionId) ? el('span', { class: 'pill', text: '입력' }) : null,
       el('span', { class: 'x', text: '×', 'data-tip': '탭 닫기 (세션은 계속 실행)', onclick: (e) => { e.stopPropagation(); closeTab(s.sessionId); } }));
@@ -305,7 +306,7 @@ function buildHead(s) {
   if (s.kind === 'background' && s.live) {
     actions.push(el('button', { text: '중지', onclick: () => act('stop', s) }), el('button', { text: '재시작', onclick: () => act('respawn', s) }));
   } else if (s.kind === 'background') {
-    actions.push(el('button', { text: '재시작', onclick: () => act('respawn', s) }), el('button', { class: 'danger', text: '삭제', onclick: () => confirm(`"${s.name}" 백그라운드 세션을 삭제할까요? (트랜스크립트는 남습니다)`) && act('rm', s) }));
+    actions.push(el('button', { text: '재시작', onclick: () => act('respawn', s) }), el('button', { class: 'danger', text: '삭제', onclick: () => deleteFlow(s) }));
   }
   if (s.job) actions.unshift(el('button', { text: s.pinned ? '★ 핀 해제' : '☆ 핀', onclick: () => api.setPinned(s.short, !s.pinned, s.profile).then(loadSessions) }));
   if (!s.local || s.chatNew) actions.unshift(el('button', { class: typeof BR !== 'undefined' && BR.get(s.sessionId)?.open ? 'toggled' : '', text: '브라우저', 'data-tip': '오른쪽에 브라우저 패널 (요소 선택 → Claude에 전달)', onclick: () => { toggleBrowser(s); renderDetail(); } }));
@@ -375,7 +376,7 @@ function createTerm(s) {
   const { term, fit, box } = newXterm();
   const status = el('span', { text: '연결 안 됨' });
   const btn = el('button', { onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
-  const t = { term, fit, box, btn, status, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status, lookButton()) };
+  const t = { term, fit, box, btn, status, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status) }; // 모양 lives in the gear menu
   // one button toggles: detach only ends the `claude attach` client, the background session keeps running
   t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; btn.textContent = t.ptyId ? (live ? '떼기 (detach)' : '닫기') : (live ? '붙기 (attach)' : '이어가기 (resume)'); }; // fresh state: s is the object from when the tab was built
   t.setLabel();
@@ -473,7 +474,7 @@ function createShell(s) {
   const wt = WORKTREE_RE.test(sessionDir(s) || '') ? sessionDir(s) : null;
   const cdBtn = wt && el('button', { 'data-tip': `세션은 워크트리에서 작업 중: ${shortPath(wt)}`, onclick: () => { if (!h.ptyId) return; h.atWorktree = !h.atWorktree; api.ptyWrite(h.ptyId, `cd ${shq(h.atWorktree ? wt : shellCwd(s))}\r`); cdBtn.textContent = h.atWorktree ? '루트로 cd' : '워크트리로 cd'; h.term.focus(); } });
   if (cdBtn) cdBtn.textContent = '워크트리로 cd';
-  const h = { term, fit, box, btn, status, ptyId: null, exited: false, atWorktree: false, bar: el('div', { class: 'term-bar' }, el('b', { class: 'shell-title', text: '셸' }), btn, cdBtn, status, lookButton(), hide) };
+  const h = { term, fit, box, btn, status, ptyId: null, exited: false, atWorktree: false, bar: el('div', { class: 'term-bar' }, el('b', { class: 'shell-title', text: '셸' }), btn, cdBtn, status, hide) };
   h.setLabel = () => { btn.textContent = h.ptyId ? '닫기' : '다시 열기'; };
   h.setLabel();
   term.onData((d) => h.ptyId && api.ptyWrite(h.ptyId, d));
@@ -546,7 +547,7 @@ async function showStats(s, pane) {
   if (!st) { pane.textContent = '트랜스크립트 파일이 없습니다'; return; }
   if (typeof renderSessionStats === 'function') return renderSessionStats(st, pane, s); // stats.js: same dashboard pieces as 전체 통계
   const tk = st.tokens;
-  const tile = (k, v) => el('div', { class: 'tile' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: v }));
+  const tile = (k, v) => el('div', { class: 'tile glass' }, el('div', { class: 'k', text: k }), el('div', { class: 'v', text: v }));
   const table = (title, obj, limit = 15) => {
     const rows = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, limit);
     if (!rows.length) return null;
@@ -606,7 +607,7 @@ async function selectMemory(m) {
       el('span', { class: 'actions' },
         el('button', { text: '편집', onclick: () => editMemory(m, body) }),
         el('button', { class: 'danger', text: '삭제', onclick: async () => {
-          if (!confirm(`"${m.name}" 메모리를 삭제할까요?\n${shortPath(m.file)}\nMEMORY.md 인덱스 줄도 함께 지웁니다.`)) return;
+          if (!(await askConfirm(`"${m.name}" 메모리를 삭제할까요?\n${shortPath(m.file)}\nMEMORY.md 인덱스 줄도 함께 지웁니다.`, { title: '메모리 삭제', ok: '삭제' }))) return;
           await api.deleteMemory(m.file).catch((e) => alert(e.message));
           S.memSel = null; S.memory = null; loadMemory();
         } }))),
@@ -641,7 +642,7 @@ function copyBar(m) {
     msg.className = 'msg'; msg.textContent = '복사 중…';
     const dest = unpkey(sel.value);
     let r = await api.copyMemory({ src: m.file, destProjectDir: dest.dir, destProfile: dest.profile }).catch((e) => ({ error: e.message }));
-    if (r.exists && confirm('대상 프로젝트에 같은 이름의 메모리가 있습니다. 덮어쓸까요?')) r = await api.copyMemory({ src: m.file, destProjectDir: dest.dir, destProfile: dest.profile, overwrite: true }).catch((e) => ({ error: e.message }));
+    if (r.exists && await askConfirm('대상 프로젝트에 같은 이름의 메모리가 있습니다. 덮어쓸까요?', { title: '메모리 복사', ok: '덮어쓰기', danger: false })) r = await api.copyMemory({ src: m.file, destProjectDir: dest.dir, destProfile: dest.profile, overwrite: true }).catch((e) => ({ error: e.message }));
     if (r.error) { msg.className = 'msg err'; msg.textContent = r.error; }
     else if (r.exists) { msg.textContent = '취소됨'; }
     else { msg.className = 'msg ok'; msg.textContent = `복사됨 → ${shortPath(r.dest)}  (MEMORY.md 인덱스 갱신)`; S.memory = null; }
@@ -811,21 +812,28 @@ function renameFlow(s) {
         setTimeout(() => tt?.ptyId && api.ptyWrite(tt.ptyId, `/rename ${name}\r`), 2500);
       }
     }
-    setTimeout(loadSessions, 800);
+    setTimeout(async () => { await loadSessions(); if (S.view === 'workspace' && typeof renderWorkspace === 'function' && WS.data) renderWorkspace({ still: true }); }, 800); // the card line follows the new name
   };
   dlgRename.showModal();
   $('#rename-name').select();
 }
+// in-app confirm: native confirm() looks foreign and can leave the window without keyboard focus on macOS. 취소 is the first
+// (default) button, so Enter never confirms by accident; only the 확인 button resolves true (Esc, 취소, backdrop → false)
+function askConfirm(body, { title = '확인', ok = '확인', danger = true, notice = false } = {}) { // notice: just a report, 확인 only
+  const d = $('#dlg-confirm'), b = $('#confirm-ok'), c = $('#confirm-cancel');
+  $('#confirm-title').textContent = title; $('#confirm-body').textContent = body; b.textContent = ok; b.classList.toggle('danger', danger); c.hidden = notice;
+  return new Promise((res) => { d.onclose = () => res(d.returnValue === 'ok'); d.returnValue = ''; d.showModal(); (notice ? b : c).focus(); });
+}
 async function deleteFlow(s, { purge = false } = {}) {
   if (s.kind === 'background') {
     const what = purge ? '세션과 대화 기록(트랜스크립트)을 모두 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.' : '백그라운드 세션을 삭제할까요?\n대화 기록(트랜스크립트)은 남아 「트랜스크립트만」 그룹에서 다시 이어갈 수 있습니다.';
-    if (!confirm(`"${s.name}" ${s.live ? '(실행 중이라 먼저 중지합니다) ' : ''}${what}`)) return;
+    if (!(await askConfirm(`"${s.name}" ${s.live ? '(실행 중이라 먼저 중지합니다) ' : ''}${what}`, { title: purge ? '완전 삭제' : '세션 삭제', ok: '삭제' }))) return;
     if (s.live) await api.agentAction('stop', s.short, s.profile);
     const r = await api.agentAction('rm', s.short, s.profile);
     if (!r.ok) { alert(r.output || 'rm 실패'); return; }
     if (purge && s.file) await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));
   } else {
-    if (!confirm(`"${s.name}" 의 트랜스크립트(${fmtBytes(s.size)})를 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.`)) return;
+    if (!(await askConfirm(`"${s.name}" 의 트랜스크립트(${fmtBytes(s.size)})를 영구 삭제할까요?\n이 세션은 더 이상 이어갈 수 없습니다.`, { title: '트랜스크립트 삭제', ok: '삭제' }))) return;
     await api.deleteTranscript({ sessionId: s.sessionId, projectDir: s.projectDir, profile: s.profile }).catch((e) => alert(e.message));
   }
   closeTab(s.sessionId);

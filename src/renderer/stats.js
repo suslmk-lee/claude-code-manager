@@ -65,7 +65,7 @@ function kpi(label, value, fmt, { spark, color = 'var(--acc)', delta, sub, i = 0
   const d = delta != null && isFinite(delta)
     ? el('div', { class: 'delta ' + (delta > 0.005 ? 'up' : delta < -0.005 ? 'down' : 'flat'), text: `${delta > 0.005 ? '▲' : delta < -0.005 ? '▼' : '•'} ${Math.abs(delta * 100).toFixed(0)}% vs 이전`, 'data-tip': `같은 길이의 직전 기간(${n}일) 대비 증감` })
     : sub ? el('div', { class: 'delta flat', text: sub, 'data-tip': sub }) : null;
-  const card = el('div', { class: 'kpi', style: `--i:${i}` }, el('div', { class: 'k', text: label }), v, d, spark ? sparkline(spark, color) : null);
+  const card = el('div', { class: 'kpi glass', style: `--i:${i}` }, el('div', { class: 'k', text: label }), v, d, spark ? sparkline(spark, color) : null);
   requestAnimationFrame(() => countUp(v, value, fmt));
   return card;
 }
@@ -185,7 +185,7 @@ function table(headers, rows) {
   return el('table', {}, el('tr', {}, ...headers.map((h) => el('th', { text: h }))),
     ...rows.map((r) => el('tr', {}, ...r.map((c, i) => el('td', { class: i ? 'num' : '', text: c })))));
 }
-const card = (title, body, extra, cls = '') => el('div', { class: 'card2 ' + cls }, el('h4', {}, title, extra || null), body); // div, not section: the global section rule would let it flex-shrink
+const card = (title, body, extra, cls = '') => el('div', { class: 'card2 glass ' + cls }, el('h4', {}, title, extra || null), body); // div, not section: the global section rule would let it flex-shrink
 
 function renderStats() {
   const g = ST.data, prices = loadPrices(), pane = $('#stats-detail');

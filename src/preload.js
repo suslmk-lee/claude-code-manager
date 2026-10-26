@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
   newSession: (req) => ipcRenderer.invoke('session:new', req),
   resumeBg: (req) => ipcRenderer.invoke('session:resumeBg', req),
   pickDir: () => ipcRenderer.invoke('dialog:pickDir'),
+  planMove: (req) => ipcRenderer.invoke('folder:plan', req),
+  moveFolder: (req) => ipcRenderer.invoke('folder:move', req),
   setBadge: (n) => ipcRenderer.send('app:badge', n),
   focusWindow: () => ipcRenderer.send('win:focus'),
   ptyOpen: (req) => ipcRenderer.invoke('pty:open', req),

@@ -1,5 +1,5 @@
 'use strict';
-/* global $, el, S, fmtN, fmtTok, shortPath, api, turnEl, TR, renderTabs, renderDetail, marked, openSession, attach, loadSessions, cur */
+/* global $, el, S, fmtN, fmtTok, shortPath, api, askConfirm, turnEl, TR, renderTabs, renderDetail, marked, openSession, attach, loadSessions, cur */
 // 대화 탭의 챗 레이어: composer under the transcript, streaming assistant text, tool lines, permission / question cards.
 
 const CH = new Map(); // key (sessionId) → { key, s, busy, model, pending: Map<id, req>, stream: { text, el } | null, status, closed }
@@ -355,7 +355,7 @@ async function handoffToTerminal(st) {
   TR.delete(sessionId); S.tab = 'terminal'; openSession(sessionId); attach(cur());
 }
 async function takeOverFromTerminal(s) {
-  if (!confirm(`"${s.name}" 백그라운드 세션을 중지하고 여기서 챗으로 이어갈까요?`)) return;
+  if (!(await askConfirm(`"${s.name}" 백그라운드 세션을 중지하고 여기서 챗으로 이어갈까요?`, { title: '챗으로 이어가기', ok: '중지하고 이어가기', danger: false }))) return;
   const r = await api.agentAction('stop', s.short, s.profile);
   if (!r.ok) { alert(r.output || 'stop 실패'); return; }
   await until(async () => { await loadSessions(); return !S.sessions.find((v) => v.sessionId === s.sessionId)?.live; });

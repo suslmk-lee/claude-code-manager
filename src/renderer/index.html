@@ -17,6 +17,7 @@
         <div id="session-list"></div>
       </div>
     </div>
+    <button class="nav icon sq" id="btn-workspace" data-tip="워크스페이스" aria-label="워크스페이스"><svg viewBox="0 0 24 24"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg></button>
     <button class="tab-arrow" id="tabs-prev" hidden data-tip="이전 탭 보기">‹</button>
     <div id="tabs"></div>
     <button class="tab-arrow" id="tabs-next" hidden data-tip="다음 탭 보기">›</button>
@@ -29,7 +30,6 @@
     <div class="menu" id="gear-menu">
       <button id="btn-gear" class="icon" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <div class="flyout gear-pop">
-        <button class="nav" id="btn-workspace"><svg viewBox="0 0 24 24"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>워크스페이스</button>
         <button class="nav" id="btn-stats"><svg viewBox="0 0 24 24"><path d="M5 19.5V12M12 19.5V5M19 19.5v-9"/></svg>통계</button>
         <button class="nav" id="btn-memory"><svg viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M8 9.5h8M8 13h8M8 16.5h5"/></svg>메모리</button>
         <div class="sep"></div>
@@ -65,7 +65,7 @@
     <section id="stats-detail" class="pane stats-pane"></section>
   </main>
 
-  <dialog id="dlg-new">
+  <dialog id="dlg-new" class="glass">
     <form method="dialog">
       <h3>새 세션</h3>
       <label>작업 폴더 <div class="row"><input id="new-cwd" readonly placeholder="폴더를 선택하세요"><button type="button" id="new-pick">선택…</button></div></label>
@@ -97,7 +97,7 @@
     </form>
   </dialog>
 
-  <dialog id="dlg-memory">
+  <dialog id="dlg-memory" class="glass">
     <form method="dialog">
       <h3>새 메모리</h3>
       <label>프로젝트 <select id="nm-project"></select></label>
@@ -115,12 +115,31 @@
       <div class="row right"><button value="cancel">취소</button><button value="ok" class="primary">만들고 편집</button></div>
     </form>
   </dialog>
-  <dialog id="dlg-rename">
+  <dialog id="dlg-rename" class="glass">
     <form method="dialog">
       <h3>이름 변경</h3>
       <label>새 이름 <input id="rename-name" autocomplete="off"></label>
       <p class="hint" id="rename-hint"></p>
       <div class="row right"><button value="cancel">취소</button><button value="ok">변경</button></div>
+    </form>
+  </dialog>
+  <dialog id="dlg-move" class="glass">
+    <form method="dialog">
+      <h3>폴더 이동</h3>
+      <p class="hint">폴더를 옮기고 Claude Code 기록(대화 · 메모리 · 신뢰 설정 · 히스토리 · 잡)을 새 경로로 함께 옮깁니다. 실행 중인 백그라운드 세션은 멈췄다가 다시 시작합니다.</p>
+      <label>옮길 폴더 <span class="mono" id="move-from"></span></label>
+      <label>옮길 위치 (상위 폴더) <span class="row"><input id="move-dest" list="move-dests" autocomplete="off" placeholder="분류 폴더를 고르거나 경로 입력"><button type="button" id="move-pick">찾기…</button></span><datalist id="move-dests"></datalist></label>
+      <label>새 이름 <input id="move-name" autocomplete="off"></label>
+      <p class="hint">새 경로 <span class="mono" id="move-to"></span></p>
+      <div id="move-plan" class="move-plan"></div>
+      <div class="row right"><button value="cancel">취소</button><button value="ok" id="move-ok" class="danger" disabled>이동</button></div>
+    </form>
+  </dialog>
+  <dialog id="dlg-confirm" class="glass">
+    <form method="dialog">
+      <h3 id="confirm-title">확인</h3>
+      <p class="hint" id="confirm-body"></p>
+      <div class="row right"><button value="cancel" id="confirm-cancel">취소</button><button value="ok" id="confirm-ok" class="danger">확인</button></div>
     </form>
   </dialog>
   <div id="ctx" class="ctx hidden"></div>

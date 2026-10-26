@@ -373,3 +373,12 @@ test('renderer scripts share one global scope: no top-level name is declared twi
     }
   }
 });
+
+test('renderer: no mid-line // comment swallows the handlers after it (tabs lost onclick/data-tip this way once)', () => {
+  const dir = path.join(__dirname, '..', 'src', 'renderer');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+    fs.readFileSync(path.join(dir, f), 'utf8').split('\n').forEach((line, i) => {
+      assert.ok(!/\/\/.*\b(?:on[a-z]+|'data-[a-z]+')\s*:\s*[`'"(]/.test(line), `${f}:${i + 1} has a handler after a // comment`);
+    });
+  }
+});

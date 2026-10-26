@@ -5,6 +5,10 @@
 
 const TERM_THEMES = [
   { id: 'default', name: '기본', bg: '#111317', fg: '#ffffff', ansi: null },
+  // the three tinted neutral ramps (same steps as the app themes): ramp steps for black/white, muted tinted ANSI so diffs still read
+  { id: 'mauve', name: '모브 (회보라)', bg: '#17151c', fg: '#e2dde7', cursor: '#aaa2b3', sel: '#45404f', ansi: ['#292531', '#d78a8a', '#9bc4a0', '#d9c27a', '#8f9fd8', '#c4a0d4', '#8ec4c4', '#aaa2b3', '#716879', '#e6a0a0', '#b2d6b6', '#e8d59a', '#a9b7e6', '#d6b8e2', '#a8d6d6', '#e2dde7'] },
+  { id: 'mocha', name: '모카 (갈색)', bg: '#211b1a', fg: '#e8d8ce', cursor: '#c1a094', sel: '#60433d', ansi: ['#382a28', '#d58a7a', '#a8b887', '#d9b36e', '#9aa6c0', '#c89ab0', '#93b8ae', '#c1a094', '#916b60', '#e4a392', '#bfcc9f', '#e6c98e', '#b3bdd2', '#d8b3c6', '#abcbc2', '#e8d8ce'] },
+  { id: 'slate', name: '슬레이트 (청회색)', bg: '#111522', fg: '#dce3ef', cursor: '#98a9c4', sel: '#303d59', ansi: ['#1e263b', '#d4848e', '#93c0a3', '#d4bd7c', '#7f9ed6', '#b79bd3', '#83bfcc', '#98a9c4', '#536684', '#e39da5', '#abd3b8', '#e2d09b', '#9db7e6', '#ccb4e2', '#a0d2dc', '#dce3ef'] },
   { id: 'dracula', name: 'Dracula', bg: '#282a36', fg: '#f8f8f2', sel: '#44475a', ansi: ['#21222c', '#ff5555', '#50fa7b', '#f1fa8c', '#bd93f9', '#ff79c6', '#8be9fd', '#f8f8f2', '#6272a4', '#ff6e6e', '#69ff94', '#ffffa5', '#d6acff', '#ff92df', '#a4ffff', '#ffffff'] },
   { id: 'onedark', name: 'One Dark', bg: '#282c34', fg: '#abb2bf', cursor: '#528bff', sel: '#3e4451', ansi: ['#282c34', '#e06c75', '#98c379', '#e5c07b', '#61afef', '#c678dd', '#56b6c2', '#abb2bf', '#5c6370', '#e06c75', '#98c379', '#e5c07b', '#61afef', '#c678dd', '#56b6c2', '#ffffff'] },
   { id: 'tokyonight', name: 'Tokyo Night', bg: '#1a1b26', fg: '#c0caf5', sel: '#33467c', ansi: ['#15161e', '#f7768e', '#9ece6a', '#e0af68', '#7aa2f7', '#bb9af7', '#7dcfff', '#a9b1d6', '#414868', '#f7768e', '#9ece6a', '#e0af68', '#7aa2f7', '#bb9af7', '#7dcfff', '#c0caf5'] },
@@ -36,7 +40,18 @@ const DEFAULT_FONT_STACK = '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "C
 // monospace families worth offering when installed (checked below); anything else goes in the free-text field
 const FONT_CANDIDATES = ['D2Coding', 'D2CodingLigature', 'NanumGothicCoding', 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'Fira Code', 'FiraCode Nerd Font', 'Cascadia Code', 'Cascadia Mono', 'SF Mono', 'Menlo', 'Monaco', 'Source Code Pro', 'IBM Plex Mono', 'Hack', 'Hack Nerd Font', 'MesloLGS NF', 'Inconsolata', 'Ubuntu Mono', 'Roboto Mono', 'Victor Mono', 'Iosevka', 'Consolas', 'Courier New', 'Pretendard Mono', 'Sarasa Mono K'];
 
-const LOOK = (() => { try { return { app: 'default', theme: 'default', font: '', size: 13, alpha: 1, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { app: 'default', theme: 'default', font: '', size: 13, alpha: 1 }; } })();
+const LOOK = (() => { try { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1 }; } })();
+// card style (surface): how cards, tiles, tabs and stat blocks are drawn — style.css keys every rule off html[data-surface]
+const SURFACES = [
+  { id: 'glass', name: '리퀴드 글라스', hint: '반투명 유리 · 굴절 림 · 광택 · 색 번짐' },
+  { id: 'mono', name: '모노라인 미니멀', hint: '1px 선 · 작은 반경 · 그림자 없음 · 간격과 글자로 위계' },
+  { id: 'tonal', name: '플랫 톤 계층', hint: '테두리 없이 밝기 단계로 층 구분 · 알약 버튼 (Material 3)' },
+  { id: 'neo', name: '네오모피즘', hint: '배경과 같은 색 · 밝은/어두운 그림자 두 개로 돌출, 눌린 상태는 함몰' },
+  { id: 'paper', name: '레이어드 페이퍼', hint: '종이가 겹쳐 쌓인 느낌 · 아래로 겹치는 장 · 부드러운 깊이' },
+  { id: 'glow', name: '아웃라인 글로우', hint: '얇은 테두리와 강조색 발광 · 활성 요소만 빛남 · 터미널 톤' },
+  { id: 'aurora', name: '오로라', hint: '흐릿한 색 덩어리 배경 위 반투명 카드 · 림과 광택 없음' },
+  { id: 'brutal', name: '브루탈리즘', hint: '굵은 단색 테두리 · 직각에 가까운 모서리 · 오프셋 그림자' },
+];
 
 // App (chrome) themes: base colours only — style.css derives buttons, hovers, selections, borders from them with color-mix.
 const APP_THEMES = [
@@ -44,6 +59,10 @@ const APP_THEMES = [
   { id: 'graphite-blue', name: '그라파이트 · 파랑', bg: '#111317', panel: '#181b21', line: '#2a2f3a', fg: '#d7dae0', dim: '#8a919e', acc: '#5b9cf6', ok: '#4caf7d', warn: '#e0b341', bad: '#e05d5d', field: '#0d0f13', link: '#8ab4f8' },
   { id: 'graphite-green', name: '그라파이트 · 초록', bg: '#101412', panel: '#161c18', line: '#27312b', fg: '#d6dfd8', dim: '#88968c', acc: '#4caf7d', ok: '#6fcf97', warn: '#e0b341', bad: '#e05d5d', field: '#0b0f0d', link: '#8fd3b0' },
   { id: 'mono', name: '모노크롬', bg: '#0e0e10', panel: '#161618', line: '#2a2a2e', fg: '#e4e4e7', dim: '#8e8e95', acc: '#c9c9cf', ok: '#9ad0a8', warn: '#d9c27a', bad: '#d97b7b', field: '#0a0a0b', link: '#b8c4ff', onAcc: '#111' },
+  // tinted 6-step neutral ramps (bg → panel → line → · → dim → fg); the accent is the lightest step, status colours stay muted
+  { id: 'mauve', name: '모브 (회보라)', bg: '#17151c', panel: '#292531', line: '#45404f', fg: '#e2dde7', dim: '#aaa2b3', acc: '#e2dde7', ok: '#9ad0a8', warn: '#d9c27a', bad: '#d97b7b', field: '#17151c', link: '#c4b5e0', onAcc: '#17151c' },
+  { id: 'mocha', name: '모카 (갈색)', bg: '#211b1a', panel: '#382a28', line: '#60433d', fg: '#e8d8ce', dim: '#c1a094', acc: '#e8d8ce', ok: '#9ad0a8', warn: '#d9c27a', bad: '#d97b7b', field: '#211b1a', link: '#d9b48f', onAcc: '#211b1a' },
+  { id: 'slate', name: '슬레이트 (청회색)', bg: '#111522', panel: '#1e263b', line: '#303d59', fg: '#dce3ef', dim: '#98a9c4', acc: '#dce3ef', ok: '#9ad0a8', warn: '#d9c27a', bad: '#d97b7b', field: '#111522', link: '#9fb4e0', onAcc: '#111522' },
   { id: 'dracula', name: 'Dracula', bg: '#282a36', panel: '#21222c', line: '#44475a', fg: '#f8f8f2', dim: '#8d93b3', acc: '#bd93f9', ok: '#50fa7b', warn: '#f1fa8c', bad: '#ff5555', field: '#1e1f29', link: '#8be9fd', onAcc: '#1b1c26' },
   { id: 'nord', name: 'Nord', bg: '#2e3440', panel: '#272c36', line: '#434c5e', fg: '#eceff4', dim: '#9aa5b5', acc: '#88c0d0', ok: '#a3be8c', warn: '#ebcb8b', bad: '#bf616a', field: '#242933', link: '#81a1c1', onAcc: '#1f252e' },
   { id: 'tokyonight', name: 'Tokyo Night', bg: '#1a1b26', panel: '#16161e', line: '#2f3549', fg: '#c0caf5', dim: '#7982a9', acc: '#7aa2f7', ok: '#9ece6a', warn: '#e0af68', bad: '#f7768e', field: '#13131a', link: '#7dcfff', onAcc: '#14151f' },
@@ -98,6 +117,7 @@ const hasFont = (() => {
 function applyLook() {
   const o = xtermOptions();
   applyAppTheme();
+  document.documentElement.dataset.surface = SURFACES.some((x) => x.id === LOOK.surface) ? LOOK.surface : 'glass';
   const tbg = termBase(currentTheme()).bg;
   document.documentElement.style.setProperty('--term-bg', alphaOn() ? withAlpha(tbg, LOOK.alpha) : tbg);
   document.documentElement.classList.toggle('translucent', alphaOn()); // page chrome stays opaque, the terminal areas go see-through
@@ -108,6 +128,7 @@ function applyLook() {
   saveLook();
   $('#term-look')?.querySelectorAll('.theme-row[data-id]').forEach((r) => r.classList.toggle('sel', r.dataset.id === LOOK.theme));
   $('#term-look')?.querySelectorAll('.theme-row[data-app]').forEach((r) => r.classList.toggle('sel', r.dataset.app === LOOK.app));
+  $('#term-look')?.querySelectorAll('.theme-row[data-surface]').forEach((r) => r.classList.toggle('sel', r.dataset.surface === LOOK.surface));
 }
 applyLook(); // the pane background follows the theme from the first paint
 
@@ -122,9 +143,10 @@ function uiSwatch(a) { // mini app window: header strip with the accent dot, bod
     el('span', { class: 'top', style: `background:${a.panel};border-bottom:1px solid ${a.line}` }, el('i', { style: `background:${a.acc}` }), el('i', { style: `background:${a.dim}` }), el('i', { style: `background:${a.dim}` })),
     el('span', { class: 'body' }, el('i', { style: `background:${a.fg};width:72%` }), el('i', { style: `background:${a.dim};width:50%` }), el('i', { style: `background:${a.acc};width:30%;height:5px` })));
 }
-function closeLook() { $('#term-look')?.remove(); document.removeEventListener('mousedown', onDocDown, true); }
-function onDocDown(e) { const p = $('#term-look'); if (p && !p.contains(e.target) && !e.target.closest('.look-btn')) closeLook(); }
-function openLook(anchor) {
+let lookPage = 'app'; // the section last viewed; reopening lands there
+function closeLook() { const d = $('#term-look'); if (d) { if (d.open) d.close(); d.remove(); } }
+// 모양: a centred modal — sections down the left (앱 테마 · 카드 스타일 · 터미널 · 터미널 테마), the chosen one on the right
+function openLook() {
   if ($('#term-look')) return closeLook();
   const fonts = FONT_CANDIDATES.filter(hasFont);
   const known = !LOOK.font || LOOK.font === 'ui-monospace' || fonts.includes(LOOK.font);
@@ -139,25 +161,28 @@ function openLook(anchor) {
   const size = el('input', { type: 'number', min: '9', max: '24', step: '1', value: String(LOOK.size), class: 'look-size', oninput: () => { const n = Number(size.value); if (n >= 9 && n <= 24) { LOOK.size = n; applyLook(); } } });
   const pct = el('span', { class: 'look-unit', text: `${Math.round(LOOK.alpha * 100)}%` });
   const alpha = el('input', { type: 'range', min: '30', max: '100', step: '5', value: String(Math.round(LOOK.alpha * 100)), class: 'look-alpha', oninput: () => { LOOK.alpha = Number(alpha.value) / 100; pct.textContent = `${alpha.value}%`; applyLook(); } });
-  const pop = el('div', { id: 'term-look', class: 'look-pop' },
-    el('div', { class: 'look-head' }, el('b', { text: '모양' }), el('button', { class: 'x', text: '×', onclick: closeLook })),
-    el('div', { class: 'look-label', style: 'padding:0 12px 4px', text: '앱 테마' }),
-    el('div', { class: 'theme-list' }, ...APP_THEMES.map((a) => el('div', { class: 'theme-row' + (a.id === LOOK.app ? ' sel' : ''), 'data-app': a.id, onclick: () => { LOOK.app = a.id; applyLook(); } },
-      uiSwatch(a), el('span', { class: 'theme-name', text: a.name })))),
-    el('div', { class: 'look-label look-section', text: '터미널' }),
-    el('div', { class: 'look-row' }, el('span', { class: 'look-label', text: 'Font' }), sel, size, el('span', { class: 'look-unit', text: 'px' })),
-    custom,
-    isMac ? el('div', { class: 'look-row', 'data-tip': '터미널 배경만 투명해지고 글자는 그대로입니다 · 뒤 창이 비쳐 보임' }, el('span', { class: 'look-label', text: '투명도' }), alpha, pct) : null,
-    el('div', { class: 'look-label', style: 'padding:8px 12px 4px', text: '터미널 테마' }),
-    el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
-      swatch(t), el('span', { class: 'theme-name', text: t.name })))));
-  document.body.append(pop);
-  const r = anchor.getBoundingClientRect(); // under the button, kept inside the window
-  pop.style.top = `${Math.round(r.bottom + 6)}px`;
-  pop.style.left = `${Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, Math.round(r.right - pop.offsetWidth)))}px`;
-  document.addEventListener('mousedown', onDocDown, true);
+  const PAGES = [
+    ['app', '앱 테마', () => el('div', { class: 'theme-list' }, ...APP_THEMES.map((a) => el('div', { class: 'theme-row glass' + (a.id === LOOK.app ? ' sel' : ''), 'data-app': a.id, onclick: () => { LOOK.app = a.id; applyLook(); } },
+      uiSwatch(a), el('span', { class: 'theme-name', text: a.name }))))],
+    ['surface', '카드 스타일', () => el('div', { class: 'theme-list' }, ...SURFACES.map((x) => el('div', { class: 'theme-row glass' + (x.id === LOOK.surface ? ' sel' : ''), 'data-surface': x.id, onclick: () => { LOOK.surface = x.id; applyLook(); } },
+      el('span', { class: `surf-swatch ${x.id}` }, el('i'), el('i')), el('span', {}, el('span', { class: 'theme-name', text: x.name }), el('span', { class: 'theme-hint', text: x.hint })))))],
+    ['term', '터미널 글꼴 · 투명도', () => el('div', {},
+      el('div', { class: 'look-row' }, el('span', { class: 'look-label', text: '글꼴' }), sel, size, el('span', { class: 'look-unit', text: 'px' })),
+      custom,
+      isMac ? el('div', { class: 'look-row', 'data-tip': '터미널 배경만 투명해지고 글자는 그대로입니다 · 뒤 창이 비쳐 보임' }, el('span', { class: 'look-label', text: '투명도' }), alpha, pct) : null,
+      el('p', { class: 'hint', text: '글꼴과 크기는 모든 터미널(Claude · 셸)에 바로 적용됩니다.' }))],
+    ['termTheme', '터미널 테마', () => el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row glass' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
+      swatch(t), el('span', { class: 'theme-name', text: t.name }))))],
+  ];
+  const main = el('div', { class: 'look-main' });
+  const side = el('div', { class: 'look-side' }, ...PAGES.map(([id, name]) => el('button', { class: 'look-nav glass', 'data-page': id, text: name, onclick: () => show(id) })));
+  const show = (id) => { lookPage = id; const [, name, build] = PAGES.find((p) => p[0] === id) || PAGES[0]; side.querySelectorAll('.look-nav').forEach((b) => b.classList.toggle('active', b.dataset.page === id)); main.replaceChildren(el('h4', { text: name }), build()); main.scrollTop = 0; };
+  const dlg = el('dialog', { id: 'term-look', class: 'look-dlg glass', onclose: () => dlg.remove(), onclick: (e) => { if (e.target === dlg) dlg.close(); } }, // a click on the backdrop closes
+    el('div', { class: 'look-head' }, el('b', { text: '모양' }), el('button', { class: 'x', text: '×', onclick: () => dlg.close() })),
+    el('div', { class: 'look-body' }, side, main));
+  document.body.append(dlg);
+  dlg.showModal();
+  show(PAGES.some((p) => p[0] === lookPage) ? lookPage : 'app');
 }
-// the button each terminal bar carries
-const lookButton = () => { const b = el('button', { class: 'look-btn', 'data-tip': '앱 테마 · 터미널 테마 · 폰트', onclick: (e) => openLook(e.currentTarget) }); b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.7 1.8-1.5 0-.9-.8-1.3-.8-2.2 0-.9.8-1.6 1.8-1.6h1.6a4 4 0 0 0 4.1-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>모양'; return b; };
-$('#btn-look').onclick = (e) => openLook(e.currentTarget); // header entry point (no session needed)
+$('#btn-look').onclick = () => openLook(); // the gear menu is the one entry point
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#term-look')) closeLook(); }, true);
