@@ -58,7 +58,7 @@ async function scanInside(root) { // worktrees: { path, repo } — the checkout 
     if (ents.some((e) => e.isFile() && e.name === 'pyvenv.cfg')) { venvs.push(dir); return; }
     const git = ents.find((e) => e.name === '.git');
     if (git?.isFile()) { try { const m = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/][^\\/]+\s*$/m.exec(await fsp.readFile(path.join(dir, '.git'), 'utf8')); if (m) worktrees.set(dir, { path: dir, repo: path.resolve(dir, m[1]) }); } catch { /* unreadable */ } }
-    if (git?.isDirectory()) { repos.push(dir); for (const n of await ls(path.join(dir, '.git', 'worktrees'))) { try { const w = path.dirname((await fsp.readFile(path.join(dir, '.git', 'worktrees', n, 'gitdir'), 'utf8')).trim()); worktrees.set(w, { path: w, repo: dir }); } catch { /* stale entry */ } } }
+    if (git?.isDirectory()) { repos.push(dir); for (const n of await ls(path.join(dir, '.git', 'worktrees'))) { try { const w = path.resolve(path.dirname((await fsp.readFile(path.join(dir, '.git', 'worktrees', n, 'gitdir'), 'utf8')).trim())); /* resolve: git writes C:/… on Windows, keys must match the checkout side's C:… */ worktrees.set(w, { path: w, repo: dir }); } catch { /* stale entry */ } } }
     if (depth >= 6) return;
     for (const e of ents) if (e.isDirectory() && !SKIP.has(e.name)) await walk(path.join(dir, e.name), depth + 1);
   };
@@ -66,24 +66,26 @@ async function scanInside(root) { // worktrees: { path, repo } — the checkout 
   return { venvs, worktrees: [...worktrees.values()], repos };
 }
 const git = (cwd, ...args) => new Promise((res) => execFile('git', ['-C', cwd, ...args], { timeout: 20000 }, (e, out, err) => res({ ok: !e, output: (out + err).trim() })));
-const venvRe = (old) => new RegExp(esc(old) + '(?=[/"\'\\s]|$)', 'gm');
+const venvRe = (old) => new RegExp(esc(old) + '(?=[/\\\\"\'\\s]|$)', 'gm'); // \ too: Windows paths (C:\old\.venv\…)
 async function fixVenv(dir, from, to) { // the venv is already at its new place; rewrite what still says the old folder
-  const re = venvRe(from); let n = 0;
-  const bin = path.join(dir, process.platform === 'win32' ? 'Scripts' : 'bin');
-  for (const f of await ls(bin)) {
+  // a Windows path appears three ways in a venv: C:\old (scripts, .pth), C:/old (pip's file:/// URLs), C:\\old (JSON); POSIX: one
+  const alt = (p) => [p, p.replace(/\\/g, '/'), p.replace(/\\/g, '\\\\')];
+  const pairs = alt(from).map((f, i) => [f, alt(to)[i]]).filter(([f], i, a) => a.findIndex(([g]) => g === f) === i).map(([f, t]) => [venvRe(f), t]);
+  const fix = async (p) => { let k = 0; for (const [re, t] of pairs) k += await rewriteFile(p, re, t); return k; };
+  let n = 0;
+  for (const bin of ['bin', 'Scripts'].map((d) => path.join(dir, d))) for (const f of await ls(bin)) { // Scripts: Windows venvs; bin: POSIX ones (also Git Bash / WSL)
     const p = path.join(bin, f); let st; try { st = await fsp.lstat(p); } catch { continue; }
     if (!st.isFile()) continue; // symlinks (python → the base interpreter) are fine
     let head = ''; let fh; try { fh = await fsp.open(p, 'r'); const b = Buffer.alloc(2); await fh.read(b, 0, 2, 0); head = b.toString('latin1'); } catch { /* skip */ } finally { await fh?.close(); }
-    if (head === '#!' || /^activate/i.test(f)) n += await rewriteFile(p, re, to); // scripts only; a real binary is left alone
+    if (head === '#!' || /^activate/i.test(f)) n += await fix(p); // scripts only; a real binary is left alone
   }
-  for (const lib of await ls(path.join(dir, 'lib'))) {
-    const sp = path.join(dir, 'lib', lib, 'site-packages');
-    for (const f of await ls(sp)) {
-      if (f.endsWith('.pth') || f.endsWith('.egg-link')) n += await rewriteFile(path.join(sp, f), re, to);
-      else if (f.endsWith('.dist-info')) n += await rewriteFile(path.join(sp, f, 'direct_url.json'), re, to);
-    }
+  // site-packages: lib/python3.x/site-packages (POSIX) or Lib\site-packages (Windows)
+  const sps = [path.join(dir, 'lib', 'site-packages'), ...(await ls(path.join(dir, 'lib'))).map((v) => path.join(dir, 'lib', v, 'site-packages'))];
+  for (const sp of sps) for (const f of await ls(sp)) {
+    if (f.endsWith('.pth') || f.endsWith('.egg-link')) n += await fix(path.join(sp, f));
+    else if (f.endsWith('.dist-info')) n += await fix(path.join(sp, f, 'direct_url.json'));
   }
-  n += await rewriteFile(path.join(dir, 'pyvenv.cfg'), re, to);
+  n += await fix(path.join(dir, 'pyvenv.cfg'));
   return n;
 }
 async function listJobStates(p) {

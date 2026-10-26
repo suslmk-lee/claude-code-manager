@@ -100,6 +100,6 @@ test('moveFolder fixes a Python venv and repairs a git worktree inside the moved
   const wt = path.join(to, '.claude', 'worktrees', 'wt');
   assert.ok(r.log.some((l) => l.startsWith('워크트리 복구:')), r.log.join('\n'));
   assert.strictEqual(g(wt, 'rev-parse', '--abbrev-ref', 'HEAD').trim(), 'wt'); // git works inside the moved worktree again
-  assert.ok(g(to, 'worktree', 'list').includes(wt));
+  assert.ok(g(to, 'worktree', 'list').includes(wt.replace(/\\/g, '/')) || g(to, 'worktree', 'list').includes(wt)); // git prints C:/… on Windows
   fs.rmSync(root, { recursive: true, force: true });
 });
