@@ -1,6 +1,6 @@
 {
   "name": "claude-code-manager",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "description": "Desktop manager for Claude Code sessions, memory and stats",
   "main": "src/main.js",
   "private": true,
