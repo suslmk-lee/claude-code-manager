@@ -89,7 +89,8 @@ function wsCategory(e, own, kids, ctx) {
   const empty = kids.filter((k) => !(ctx.bySessions.get(k.path) || []).length);
   const subN = withS.reduce((n, x) => n + x.ss.length, 0), live = withS.reduce((n, x) => n + x.ss.filter((s) => s.live).length, 0);
   const open = WS.subOpen?.has(e.path);
-  const toggle = kids.length ? el('div', { class: 'ws-sub-toggle' + (open ? ' open' : ''), onclick: () => { (WS.subOpen ||= new Set()); if (open) WS.subOpen.delete(e.path); else WS.subOpen.add(e.path); renderWorkspace(); } },
+  let node; // this block; the toggle swaps it for a fresh one instead of re-rendering the whole view
+  const toggle = kids.length ? el('div', { class: 'ws-sub-toggle' + (open ? ' open' : ''), onclick: () => { (WS.subOpen ||= new Set()); if (open) WS.subOpen.delete(e.path); else WS.subOpen.add(e.path); const fresh = wsCategory(e, own, kids, ctx); fresh.style.animation = 'none'; node.replaceWith(fresh); } },
     el('span', { class: 'ws-sub-chev', text: open ? '▾' : '▸' }),
     el('b', { text: `하위 폴더 ${fmtN(kids.length)}개` }),
     subN ? el('span', { class: 'msg', text: ` · 세션 ${fmtN(subN)}${live ? ` (실행 중 ${live})` : ''} · ` }) : el('span', { class: 'msg', text: ' · 세션 없음' }),
@@ -100,9 +101,10 @@ function wsCategory(e, own, kids, ctx) {
     empty.length ? el('div', { class: 'ws-chips' }, ...empty.map((k) => el('button', { class: 'ws-chip', 'data-tip': `${k.path}${k.kind === 'dir' ? '\n(저장소 표식 없음)' : ''}`, onclick: () => { setView('sessions'); openNewSession(k.path); } }, k.name, el('span', { class: 'ws-chip-branch', 'data-path': k.path })))) : null) : null;
   if (sub) sub.querySelectorAll('.ws-chip-branch').forEach((b) => api.gitInfo(b.dataset.path).then((g) => { if (g) b.textContent = ` ${g.branch}${g.dirty ? '*' : ''}`; }).catch(() => {}));
   const ownCard = own.length ? wsCard({ name: `${e.name} (이 폴더)`, path: e.path, kind: 'self' }, own, ctx.memByCwd, ctx.tokByCwd) : null;
-  return el('div', { class: 'ws-cat' },
+  node = el('div', { class: 'ws-cat' },
     el('h3', {}, e.name, el('span', { class: 'msg', text: ` · 세션 ${fmtN(own.length + subN)}${own.length ? ` (이 폴더 ${own.length})` : ''}` }), el('span', { class: 'msg ws-path', text: e.path })),
     ownCard ? el('div', { class: 'ws-grid' }, ownCard) : null, toggle, sub);
+  return node;
 }
 const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';
 function wsCard(e, ss, memByCwd, tokByCwd) {
@@ -112,7 +114,8 @@ function wsCard(e, ss, memByCwd, tokByCwd) {
   const summary = latest ? (latest.job?.needs || latest.job?.detail || latest.lastPrompt || latest.job?.intent || '') : '';
   const mem = memByCwd.get(e.path) || 0, tok = tokByCwd.get(e.path) || 0;
   const dot = el('span', { class: `glyph ${needs ? 'blocked' : working ? 'working' : live ? 'idle' : 'off'} ${live ? 'live' : 'off'}` });
-  const head = el('div', { class: 'ws-head', onclick: () => { if (open) WS.open.delete(e.path); else WS.open.add(e.path); renderWorkspace(); } },
+  let node;
+  const head = el('div', { class: 'ws-head', onclick: () => { if (open) WS.open.delete(e.path); else WS.open.add(e.path); const fresh = wsCard(e, ss, memByCwd, tokByCwd); fresh.style.animation = 'none'; node.replaceWith(fresh); requestAnimationFrame(() => fresh.querySelectorAll('.ws-summary').forEach(marquee)); } },
     dot, el('b', { class: 'ws-name', text: e.name, title: e.path }),
     e.kind === 'dir' ? el('span', { class: 'pbadge', text: '폴더' }) : null,
     el('span', { class: 'spacer' }),
@@ -127,6 +130,7 @@ function wsCard(e, ss, memByCwd, tokByCwd) {
   const body = open ? el('div', { class: 'ws-body' },
     ...ss.sort((a, b) => (b.live - a.live) || ((b.lastActivity || 0) - (a.lastActivity || 0))).map((s) => sessionRow(s)),
     el('div', { class: 'ws-actions' }, el('button', { text: '＋ 여기서 새 세션', onclick: () => { setView('sessions'); openNewSession(e.path); } }))) : null;
-  return el('div', { class: 'ws-card' + (ss.length ? '' : ' ws-empty') + (open ? ' open' : ''), 'data-path': e.path }, // not `.empty`: that is the centred placeholder style
+  node = el('div', { class: 'ws-card' + (ss.length ? '' : ' ws-empty') + (open ? ' open' : ''), 'data-path': e.path }, // not `.empty`: that is the centred placeholder style
     head, summary ? el('div', { class: 'ws-summary', text: summary, 'data-tip': `${latest.name}\n${summary}` }) : null, meta, body);
+  return node;
 }
