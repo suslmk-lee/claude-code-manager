@@ -36,7 +36,7 @@ function renderWorkspace() {
     el('button', { text: '루트 추가…', onclick: async () => { const d = await api.pickDir(); if (d && !WS.roots.includes(d)) { WS.roots.push(d); saveRoots(); WS.data = null; loadWorkspace(); } } }),
     el('button', { text: '루트 변경…', onclick: async () => { const d = await api.pickDir(); if (d) { WS.roots = [d]; saveRoots(); WS.data = null; loadWorkspace(); } } }),
     el('span', { class: 'spacer' }),
-    el('span', { class: 'msg', text: `폴더 ${fmtN(targets.length)} · 세션 ${fmtN(S.sessions.length)} (루트 밖 ${fmtN(other.length)})` }),
+    el('span', { class: 'msg' }, '폴더 ', countEl(targets.length), ' · 세션 ', countEl(S.sessions.length), ` (루트 밖 ${fmtN(other.length)})`),
     el('button', { text: '↻', 'data-tip': '다시 읽기', onclick: () => { WS.data = null; loadWorkspace(); } }));
   const sections = [], idle = [];
   for (const t of trees) {
@@ -56,8 +56,19 @@ function renderWorkspace() {
   if (idle.length) sections.push(el('div', { class: 'ws-cat ws-idle' },
     el('h3', {}, '세션 없는 폴더', el('span', { class: 'msg', text: ` · ${fmtN(idle.length)}개 · 누르면 펼침` })),
     el('div', { class: 'ws-chips' }, ...idle.map((e) => el('button', { class: 'ws-chip', text: e.name, 'data-tip': `${e.path}\n하위 폴더 ${(e.children || []).length}개`, onclick: () => { (WS.showEmpty ||= new Set()).add(e.path); renderWorkspace(); } })))));
-  pane.replaceChildren(bar, ...sections);
+  pane.replaceChildren(el('div', { class: 'ws-glow', 'aria-hidden': 'true' }), bar, ...sections.map((sec, i) => { sec.style.setProperty('--i', i); return sec; }));
+  pane.onscroll = () => pane.style.setProperty('--py', `${pane.scrollTop * 0.25}px`); // parallax: the glow drifts at a quarter of the scroll
+  requestAnimationFrame(() => pane.querySelectorAll('.ws-summary').forEach(marquee));
 }
+// numbers roll up from 0 (stats.js countUp), text that is cut off drifts sideways by exactly its overflow
+function countEl(n) { const e = el('b', { class: 'ws-count', text: '0' }); requestAnimationFrame(() => wsCountUp(e, n, 600)); return e; }
+function wsCountUp(node, to, ms) { // own copy: stats.js (which has countUp) loads after this file
+  if (!to || matchMedia('(prefers-reduced-motion: reduce)').matches) { node.textContent = fmtN(to || 0); return; }
+  const t0 = performance.now();
+  const step = (t) => { const p = Math.min(1, (t - t0) / ms), e = 1 - (1 - p) ** 3; node.textContent = fmtN(Math.round(to * e)); if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function marquee(e) { const over = e.scrollWidth - e.clientWidth; if (over > 8) { e.style.setProperty('--shift', `-${over}px`); e.style.setProperty('--dur', `${Math.max(6, over / 25)}s`); e.classList.add('marquee'); } }
 // sessions outside every root, grouped by their own folder, as pseudo-repos
 function groupOther(sessions) {
   const by = new Map();
@@ -70,7 +81,7 @@ function section(title, dir, entries, ctx, pseudo = false) {
   const live = cards.reduce((n, c) => n + c.ss.filter((s) => s.live).length, 0), total = cards.reduce((n, c) => n + c.ss.length, 0);
   return el('div', { class: 'ws-cat' },
     el('h3', {}, title, el('span', { class: 'msg', text: ` · 폴더 ${fmtN(cards.length)} · 세션 ${fmtN(total)}${live ? ` · 실행 중 ${live}` : ''}` }), dir ? el('span', { class: 'msg ws-path', text: dir }) : null),
-    el('div', { class: 'ws-grid' }, ...cards.map((c) => card(c.e, c.ss, ctx.memByCwd, ctx.tokByCwd))));
+    el('div', { class: 'ws-grid' }, ...cards.map((c, i) => { const k = card(c.e, c.ss, ctx.memByCwd, ctx.tokByCwd); k.style.setProperty('--i', i); return k; })));
 }
 const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';
 function card(e, ss, memByCwd, tokByCwd) {
@@ -84,7 +95,7 @@ function card(e, ss, memByCwd, tokByCwd) {
     dot, el('b', { class: 'ws-name', text: e.name, title: e.path }),
     e.kind === 'dir' ? el('span', { class: 'pbadge', text: '폴더' }) : null,
     el('span', { class: 'spacer' }),
-    ss.length ? el('span', { class: 'ws-counts', 'data-tip': `세션 ${ss.length} · 실행 중 ${live} · 작업 중 ${working} · 입력 대기 ${needs}` }, `${fmtN(ss.length)}`, working ? el('b', { class: 'w', text: ` ●${working}` }) : null, needs ? el('b', { class: 'n', text: ` !${needs}` }) : null) : el('span', { class: 'msg', text: '세션 없음' }),
+    ss.length ? el('span', { class: 'ws-counts', 'data-tip': `세션 ${ss.length} · 실행 중 ${live} · 작업 중 ${working} · 입력 대기 ${needs}` }, countEl(ss.length), working ? el('b', { class: 'w', text: ` ●${working}` }) : null, needs ? el('b', { class: 'n', text: ` !${needs}` }) : null) : el('span', { class: 'msg', text: '세션 없음' }),
     el('span', { class: 'ws-chev', text: open ? '▾' : '▸' }));
   const branch = el('span', { class: 'ws-branch', text: '' });
   if (e.kind !== 'dir') api.gitInfo(e.path).then((g) => { if (g) { branch.textContent = g.branch + (g.dirty ? '*' : ''); branch.classList.toggle('dirty', g.dirty); } }).catch(() => {});

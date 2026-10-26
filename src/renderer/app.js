@@ -152,7 +152,8 @@ function renderTabs() {
   $('#tabs').replaceChildren(...S.tabs.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean).map((s) => {
     const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
     const n = S.tabs.indexOf(s.sessionId) + 1;
-    const t = el('div', { class: 'tab' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true', 'data-tip': `${n <= 9 ? `${kbd('⌘' + n)} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
+    const t = el('div', { class: 'tab' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true',
+      onmouseenter: (e) => { const l = e.currentTarget.querySelector('.label'); const over = l.scrollWidth - l.clientWidth; if (over > 4) { l.style.setProperty('--shift', `-${over}px`); l.style.setProperty('--dur', `${Math.max(2.5, over / 30)}s`); l.classList.add('marquee'); } else l.classList.remove('marquee'); }, // a cut-off name drifts to show the rest while hovered 'data-tip': `${n <= 9 ? `${kbd('⌘' + n)} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
       // drag to reorder: native HTML5 DnD; the half of the target the pointer is over decides before/after
       ondragstart: (e) => { S.dragTab = s.sessionId; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.sessionId); setTimeout(() => t.classList.add('dragging')); },
       ondragover: (e) => { if (!S.dragTab || S.dragTab === s.sessionId) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const r = t.getBoundingClientRect(); const after = e.clientX > r.left + r.width / 2; t.classList.toggle('drop-after', after); t.classList.toggle('drop-before', !after); },
@@ -217,7 +218,7 @@ function renderSessionList() {
   const group = (title, arr) => {
     if (!arr.length) return;
     list.append(el('div', { class: 'group-title', text: `${title} (${arr.length})` }));
-    for (const s of arr) list.append(sessionRow(s));
+    for (const s of arr) { const r = sessionRow(s); r.style.setProperty('--i', list.childElementCount); list.append(r); } // stagger index
   };
   const bucket = (s) => s.pinned ? 'pinned' : (s.job?.needs || s.state === 'blocked') ? 'needs'
     : (s.state === 'working' || s.status === 'busy') ? 'working' : s.job ? 'done' : 'other';
