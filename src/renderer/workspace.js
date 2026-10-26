@@ -13,17 +13,28 @@ function togglePin(p) { const pins = wsPins(); if (pins.has(p)) pins.delete(p); 
 const pinBtn = (p) => el('button', { class: 'ws-pin' + (isPinned(p) ? ' on' : ''), text: isPinned(p) ? '★' : '☆', 'data-tip': isPinned(p) ? '핀 해제' : '핀 고정 (맨 위 핀 묶음에 표시)', onclick: (ev) => { ev.stopPropagation(); togglePin(p); } });
 const under = (p, dir) => p === dir || p.startsWith(dir + api.sep);
 // a session belongs to the deepest repo whose path contains its working dir (worktrees count for their parent repo)
-const sessionHome = (s) => { const d = sessionDir(s) || ''; const m = WORKTREE_RE.exec(d); return m ? m[1] : d; };
+// a session belongs to the folder it was launched in (not where it cd'ed to later — a worktree, a sub-repo); a worktree launch maps to its repo
+const sessionHome = (s) => { const d = s.launchDir || sessionDir(s) || ''; const m = WORKTREE_RE.exec(d); return m ? m[1] : d; };
 
 async function loadWorkspace() {
   const pane = $('#workspace-detail');
-  if (!WS.data) pane.replaceChildren(el('div', { class: 'empty', text: '폴더를 읽는 중…' }));
+  // a cached view paints at once (sessions are live anyway); the rescan then updates it in place only if the disk changed —
+  // otherwise the open would show the old view, then visibly redraw it with the entrance replayed
+  const cached = !!WS.data;
+  if (cached) renderWorkspace(); else pane.replaceChildren(el('div', { class: 'empty', text: '폴더를 읽는 중…' }));
   const roots = wsRoots();
   const [trees, projects, stats] = await Promise.all([Promise.all(roots.map((r) => api.scanWorkspace(r).catch(() => ({ root: r, entries: [] })))), api.listProjects().catch(() => []), api.globalStats({}).catch(() => null)]);
-  WS.data = { trees, projects, stats };
-  renderWorkspace();
+  const sig = (d) => JSON.stringify([d.trees, d.projects], (k, v) => (k === 'root' ? undefined : v)); // folders and memory counts (renderWorkspace tags entries with `root`: ignore it); token figures move constantly and are patched in place instead
+  const fresh = { trees, projects, stats };
+  if (cached && sig(fresh) === sig(WS.data)) { WS.data = fresh; refreshTokens(); return; }
+  WS.data = fresh;
+  renderWorkspace({ still: cached });
 }
 
+function refreshTokens() { // the 출력 figure on each card, without a re-render
+  const tok = new Map(Object.values(WS.data?.stats?.byProject || {}).map((p) => [p.cwd, p.tokens?.output || 0]));
+  for (const c of document.querySelectorAll('#workspace-detail .ws-card[data-path]')) { const t = tok.get(c.dataset.path); const sp = [...c.querySelectorAll('.ws-meta span')].find((x) => x.textContent.startsWith('출력 ')); if (sp && t) sp.textContent = `출력 ${fmtTok(t)}`; }
+}
 function renderWorkspace({ still = false } = {}) { // still: refresh in place (after a rename) without replaying the entrance animation
   const pane = $('#workspace-detail'), { trees, projects, stats } = WS.data;
   pane.classList.toggle('ws-still', still);
@@ -157,34 +168,36 @@ function wsCard(e, ss, memByCwd, tokByCwd) {
 function slideLayout(change, ms = 480) {
   const pane = $('#workspace-detail');
   const all = () => [...pane.querySelectorAll('.ws-card, .ws-tile, .ws-chips, .ws-cat > h3')];
-  const key = (x) => (x.dataset.path ? `card:${x.dataset.path}` : x);
-  const before = new Map(all().map((x) => [key(x), x.getBoundingClientRect()]));
+  // a swapped card is matched by its path — plus its ordinal, since a pinned folder's card is on screen twice (핀 shelf + its own place)
+  const keyed = (list) => { const n = new Map(); return list.map((x) => { if (!x.dataset.path) return [x, x]; const k = n.get(x.dataset.path) || 0; n.set(x.dataset.path, k + 1); return [x, `card:${x.dataset.path}#${k}`]; }); };
+  const before = new Map(keyed(all()).map(([x, k]) => [k, x.getBoundingClientRect()]));
   change();
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const ease = 'cubic-bezier(.22,.61,.36,1)', els = all(); // ease-out cubic: visible travel, not a snap
+  const ease = 'cubic-bezier(.22,.61,.36,1)', els = all(), key = new Map(keyed(els)); // ease-out cubic: visible travel, not a snap
   // a card that opened or closed grows/shrinks over time, and the layout below it flows with its height every frame — so the
   // others' slide is measured against the layout with that card still at its OLD height; both motions then add up cleanly
-  const grown = els.filter((x) => x.classList.contains('ws-card') && before.has(key(x)) && Math.abs(before.get(key(x)).height - x.getBoundingClientRect().height) > 1)
-    .map((x) => ({ x, from: before.get(key(x)).height, to: x.getBoundingClientRect().height }));
+  const grown = els.filter((x) => x.classList.contains('ws-card') && before.has(key.get(x)) && Math.abs(before.get(key.get(x)).height - x.getBoundingClientRect().height) > 1)
+    .map((x) => ({ x, from: before.get(key.get(x)).height, to: x.getBoundingClientRect().height }));
   for (const g of grown) g.x.style.height = `${g.from}px`;
   const after = new Map(els.map((x) => [x, x.getBoundingClientRect()]));
   for (const g of grown) { g.x.style.height = ''; g.x.animate([{ height: `${g.from}px` }, { height: `${g.to}px` }], { duration: ms, easing: ease }); }
   for (const x of els) {
-    const b = before.get(key(x)); if (!b) continue;
+    const b = before.get(key.get(x)); if (!b) continue;
     const a = after.get(x), dx = b.left - a.left, dy = b.top - a.top;
     if (dx || dy) x.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: ms, easing: ease });
   }
 }
 // 폴더 이동: pick a parent (a category folder of a root, or any folder) and a name; the plan below the fields says what
 // will travel (per profile: project dirs, trust/config keys, history lines, jobs) or why it cannot; 이동 runs it
-function moveFlow(from) {
+function moveFlow(from, keep = null) { // keep: { dest, name } to reopen with what was typed (after a cancelled confirmation)
   const d = $('#dlg-move'), dest = $('#move-dest'), name = $('#move-name'), plan = $('#move-plan'), ok = $('#move-ok');
+  let last = null; // the latest plan, for the confirmation text
   const base = from.split(/[\\/]/).pop(), parent = from.slice(0, from.length - base.length - 1);
   $('#move-from').textContent = from;
   const cats = []; // roots and their category folders (not repos), minus the folder itself and anything inside it
   for (const t of WS.data?.trees || []) { cats.push(t.root); for (const e of t.entries) if (e.kind === 'dir' && e.path !== from && !e.path.startsWith(from + api.sep)) cats.push(e.path); }
   dest.__opts = cats.map((p) => ({ value: p, text: shortPath(p) })); // the combobox (select.js) reads its choices from here
-  dest.value = parent; name.value = base;
+  dest.value = keep?.dest ?? parent; name.value = keep?.name ?? base;
   const to = () => `${dest.value.trim().replace(/[\\/]+$/, '')}${api.sep}${name.value.trim()}`;
   let seq = 0;
   const refresh = async () => {
@@ -194,6 +207,7 @@ function moveFlow(from) {
     const p = await api.planMove({ from, to: t }).catch((e) => ({ errors: [e.message.replace(/^.*?Error: /, '')] }));
     if (my !== seq) return;
     if (p.errors?.length) { plan.className = 'move-plan err'; plan.textContent = p.errors.join('\n'); return; }
+    last = p;
     const lines = [];
     if (p.live.length) lines.push(`실행 중 세션 ${p.live.length}개를 멈췄다가 다시 시작: ${p.live.map((s) => s.name).join(', ')}`);
     for (const pr of p.profiles) {
@@ -216,7 +230,14 @@ function moveFlow(from) {
   $('#move-pick').onclick = async () => { const p = await api.pickDir(); if (p) { dest.value = p; refresh(); } };
   d.onclose = async () => {
     if (d.returnValue !== 'ok') return;
-    const t = to();
+    const t = to(), typed = { dest: dest.value, name: name.value };
+    // one more step before anything moves: a confirmation whose default (Enter) is 취소; declining reopens this dialog as it was
+    const notes = [];
+    if (last?.live?.length) notes.push(`실행 중 세션 ${last.live.length}개를 멈췄다가 다시 시작합니다.`);
+    if (last?.worktrees?.length) notes.push(`⚠ git 워크트리 ${last.worktrees.length}개를 정리하지 않은 채 옮기고, 이동 뒤 git worktree repair로 다시 연결합니다.`);
+    if (last?.venvs?.length) notes.push(`Python 가상환경 ${last.venvs.length}개의 경로를 고칩니다.`);
+    const go = await askConfirm(`${from}\n→ ${t}\n\n폴더를 옮기고 Claude Code 기록(대화 · 메모리 · 신뢰 설정 · 히스토리 · 잡)을 새 경로로 함께 옮깁니다.${notes.length ? '\n' + notes.join('\n') : ''}`, { title: '폴더 이동', ok: last?.worktrees?.length ? '정리 없이 이동' : '이동' });
+    if (!go) { moveFlow(from, typed); return; }
     const r = await api.moveFolder({ from, to: t }).catch((e) => ({ error: e.message.replace(/^.*?Error: /, '') }));
     WS.data = null; WS.open.delete(from); loadSessions(); loadWorkspace();
     await askConfirm(r.error ? r.error : r.log.join('\n'), { title: r.error ? '이동 실패' : '이동 완료', ok: '확인', danger: !!r.error, notice: true });

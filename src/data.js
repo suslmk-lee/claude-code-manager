@@ -133,7 +133,7 @@ async function readHistory(p = profile()) {
     let d; try { d = JSON.parse(line); } catch { continue; }
     if (!d.sessionId) continue;
     let h = bySession.get(d.sessionId);
-    if (!h) { h = { project: d.project, firstPrompt: d.display, firstTs: d.timestamp, prompts: 0 }; bySession.set(d.sessionId, h); }
+    if (!h) { h = { project: d.project, launch: d.project, firstPrompt: d.display, firstTs: d.timestamp, prompts: 0 }; bySession.set(d.sessionId, h); } // launch: where the session started (project follows later cd's)
     h.prompts++; h.lastPrompt = d.display; h.lastTs = d.timestamp; if (d.project) h.project = d.project;
   }
   return bySession;
@@ -226,7 +226,7 @@ async function setPinned(short, on, profileId) {
 async function readJob(short, p = profile()) {
   const job = await readJson(pdir(p, 'jobs', short, 'state.json'), null);
   return job && {
-    state: job.state, detail: job.detail, tokens: job.tokens, updatedAt: job.updatedAt, intent: job.intent,
+    state: job.state, detail: job.detail, tokens: job.tokens, updatedAt: job.updatedAt, intent: job.intent, name: job.name, nameSource: job.nameSource,
     needs: typeof job.needs === 'string' ? job.needs : null,
     prs: (job.children || []).filter((c) => c.kind === 'pr').map((c) => ({ id: c.id, href: c.href })),
     frames: (job.children || []).filter((c) => c.kind === 'frame').length,
@@ -289,11 +289,13 @@ async function listProfileSessions(p) {
   const out = [];
   for (const s of byId.values()) {
     const h = history.get(s.sessionId);
-    if (h) Object.assign(s, { cwd: s.cwd || h.project, prompts: h.prompts, firstPrompt: h.firstPrompt, lastPrompt: h.lastPrompt, historyLastTs: h.lastTs });
+    if (h) Object.assign(s, { cwd: s.cwd || h.project, launchDir: h.launch, prompts: h.prompts, firstPrompt: h.firstPrompt, lastPrompt: h.lastPrompt, historyLastTs: h.lastTs });
+    if (!s.launchDir) s.launchDir = s.cwd; // no prompt yet: it is still where it was launched
     if (!s.cwd && s.projectDir) s.cwd = s.projectDir; // ponytail: encoded dir as last-resort label
     if (!s.projectDir && s.cwd && path.isAbsolute(s.cwd)) s.projectDir = encodeProject(s.cwd); // agent-only sessions (no transcript yet) still belong to a project
     const autoNamed = !s.agentName || s.agentName === s.short || s.kind === 'interactive';
-    s.name = (autoNamed && s.customTitle) ? s.customTitle : (s.agentName || s.customTitle || s.aiTitle || (s.firstPrompt || '').slice(0, 60) || s.short);
+    s.name = (s.job?.nameSource === 'user' && s.job.name) ? s.job.name // a name the user set (renameSession writes it here first; a live worker catches up via /rename)
+      : (autoNamed && s.customTitle) ? s.customTitle : (s.agentName || s.customTitle || s.aiTitle || (s.firstPrompt || '').slice(0, 60) || s.short);
     // last conversation time: last message record or last prompt; start time / file mtime only for sessions without a message yet
     s.lastActivity = Math.max(s.lastTs || 0, s.historyLastTs || 0) || s.startedAt || s.mtime || 0;
     s.live = !!s.live;

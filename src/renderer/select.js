@@ -9,15 +9,30 @@
   const options = () => pop ? [...pop.querySelectorAll('.dd-opt:not(.dis)')] : [];
   const mark = (i) => { const o = options(); o.forEach((x, k) => x.classList.toggle('sel', k === i)); o[i]?.scrollIntoView({ block: 'nearest' }); };
   function choose(sel, i) { if (sel.selectedIndex !== i) { sel.selectedIndex = i; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); } close(); sel.focus(); }
+  // the list goes under the control (or above when it does not fit). Inside an open modal dialog it must live in the dialog
+  // (nothing outside is clickable) and is placed absolutely against the dialog's box: viewport coordinates would drift once
+  // the dialog has a backdrop-filter (the card styles), which makes it the containing block even for fixed descendants.
+  function place(pop, dlg, r, ctl) {
+    pop.style.minWidth = `${Math.round(r.width)}px`;
+    if (!dlg) { // page level: fixed, viewport coordinates
+      document.body.append(pop);
+      const h = pop.offsetHeight, below = innerHeight - r.bottom - 8;
+      pop.style.left = `${Math.round(Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
+      pop.style.top = `${Math.round(h <= below || r.top < h ? r.bottom + 4 : r.top - h - 4)}px`; // flip up when it does not fit below
+      return;
+    }
+    // in a dialog: absolute inside the control's own offset parent, from offsetTop/offsetLeft — layout values that no
+    // transform, backdrop-filter or re-centring of the dialog (its content may still be loading) can shift
+    const op = ctl.offsetParent || dlg; op.append(pop); pop.style.position = 'absolute';
+    const h = pop.offsetHeight, below = innerHeight - r.bottom - 8;
+    pop.style.left = `${Math.round(Math.max(0, Math.min(ctl.offsetLeft, op.clientWidth - pop.offsetWidth - 8)))}px`;
+    pop.style.top = `${Math.round(h <= below || r.top < h ? ctl.offsetTop + ctl.offsetHeight + 4 : ctl.offsetTop - h - 4)}px`;
+  }
   function open(sel) {
     close(); cur = sel;
     const r = sel.getBoundingClientRect();
     pop = el('div', { class: 'dd', role: 'listbox' }, ...[...sel.options].map((o, i) => el('div', { class: 'dd-opt' + (o.disabled ? ' dis' : '') + (i === sel.selectedIndex ? ' sel' : ''), role: 'option', text: o.text, title: o.text, onclick: () => !o.disabled && choose(sel, i) })));
-    (sel.closest('dialog') || document.body).append(pop); // inside an open modal dialog nothing outside it is clickable
-    pop.style.minWidth = `${Math.round(r.width)}px`;
-    const h = pop.offsetHeight, below = innerHeight - r.bottom - 8;
-    pop.style.left = `${Math.round(Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
-    pop.style.top = `${Math.round(h <= below || r.top < h ? r.bottom + 4 : r.top - h - 4)}px`; // flip up when it does not fit below
+    place(pop, sel.closest('dialog'), r, sel);
     const i = options().findIndex((x) => x.classList.contains('sel')); if (i >= 0) mark(i);
     document.addEventListener('mousedown', onDoc, true); window.addEventListener('resize', close); window.addEventListener('blur', close);
   }
@@ -41,11 +56,7 @@
     pop = el('div', { class: 'dd', role: 'listbox' },
       el('div', { class: 'dd-opt dd-clear' + (inp.value ? '' : ' sel'), text: inp.placeholder ? `비우기 — ${inp.placeholder}` : '비우기', onclick: () => pickCombo(inp, '') }),
       ...opts.map((o) => el('div', { class: 'dd-opt' + (o.value === inp.value ? ' sel' : ''), role: 'option', text: o.text + (o.text !== o.value ? ` · ${o.value}` : ''), onclick: () => pickCombo(inp, o.value) })));
-    (inp.closest('dialog') || document.body).append(pop);
-    pop.style.minWidth = `${Math.round(r.width)}px`;
-    const h = pop.offsetHeight, below = innerHeight - r.bottom - 8;
-    pop.style.left = `${Math.round(Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
-    pop.style.top = `${Math.round(h <= below || r.top < h ? r.bottom + 4 : r.top - h - 4)}px`;
+    place(pop, inp.closest('dialog'), r, inp);
     const i = options().findIndex((x) => x.classList.contains('sel')); if (i >= 0) mark(i);
     document.addEventListener('mousedown', onDoc, true); window.addEventListener('resize', close); window.addEventListener('blur', close);
   }
