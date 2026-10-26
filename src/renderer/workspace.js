@@ -37,11 +37,12 @@ function renderWorkspace() {
     el('button', { text: '루트 변경…', onclick: async () => { const d = await api.pickDir(); if (d) { WS.roots = [d]; saveRoots(); WS.data = null; loadWorkspace(); } } }),
     el('span', { class: 'spacer' }),
     el('span', { class: 'msg' }, '폴더 ', countEl(targets.length), ' · 세션 ', countEl(S.sessions.length), ` (루트 밖 ${fmtN(other.length)})`),
-    el('button', { text: '↻', 'data-tip': '다시 읽기', onclick: () => { WS.data = null; loadWorkspace(); } }));
+    el('button', { text: '↻', 'data-tip': '다시 읽기', onclick: () => { WS.data = null; loadWorkspace(); } }),
+    viewCloseBtn());
   const sections = [], idle = [];
   for (const t of trees) {
     const rootRepos = t.entries.filter((e) => e.kind === 'repo');
-    if (rootRepos.length) sections.push(section(shortPath(t.root), t.root, rootRepos, ctx));
+    if (rootRepos.length) sections.push(wsSection(shortPath(t.root), t.root, rootRepos, ctx));
     for (const e of t.entries) {
       if (e.kind !== 'dir') continue;
       const own = bySessions.get(e.path) || [], kids = e.children || [];
@@ -49,10 +50,10 @@ function renderWorkspace() {
       if (!n && !WS.showEmpty?.has(e.path)) { idle.push(e); continue; } // nothing runs here: one chip at the bottom instead of a section
       // sessions that run in the category folder itself get a card of their own at the front
       const entries = own.length ? [{ name: `${e.name} (이 폴더)`, path: e.path, kind: 'self' }, ...kids] : kids;
-      sections.push(section(e.name, e.path, entries, ctx));
+      sections.push(wsSection(e.name, e.path, entries, ctx));
     }
   }
-  if (other.length) sections.push(section('기타 · 루트 밖', null, groupOther(other), ctx, true));
+  if (other.length) sections.push(wsSection('기타 · 루트 밖', null, groupOther(other), ctx, true));
   if (idle.length) sections.push(el('div', { class: 'ws-cat ws-idle' },
     el('h3', {}, '세션 없는 폴더', el('span', { class: 'msg', text: ` · ${fmtN(idle.length)}개 · 누르면 펼침` })),
     el('div', { class: 'ws-chips' }, ...idle.map((e) => el('button', { class: 'ws-chip', text: e.name, 'data-tip': `${e.path}\n하위 폴더 ${(e.children || []).length}개`, onclick: () => { (WS.showEmpty ||= new Set()).add(e.path); renderWorkspace(); } })))));
@@ -75,16 +76,16 @@ function groupOther(sessions) {
   for (const s of sessions) { const d = sessionHome(s) || '(폴더 없음)'; if (!by.has(d)) by.set(d, { name: shortPath(d), path: d, kind: 'repo', sessions: [] }); by.get(d).sessions.push(s); }
   return [...by.values()].sort((a, b) => Math.max(...b.sessions.map((s) => s.lastActivity)) - Math.max(...a.sessions.map((s) => s.lastActivity)));
 }
-function section(title, dir, entries, ctx, pseudo = false) {
+function wsSection(title, dir, entries, ctx, pseudo = false) {
   const cards = entries.map((e) => { const ss = pseudo ? e.sessions : (ctx.bySessions.get(e.path) || []); return { e, ss, last: ss.reduce((m, s) => Math.max(m, s.lastActivity || 0), 0) }; })
     .sort((a, b) => (b.ss.length ? 1 : 0) - (a.ss.length ? 1 : 0) || b.last - a.last || a.e.name.localeCompare(b.e.name));
   const live = cards.reduce((n, c) => n + c.ss.filter((s) => s.live).length, 0), total = cards.reduce((n, c) => n + c.ss.length, 0);
   return el('div', { class: 'ws-cat' },
     el('h3', {}, title, el('span', { class: 'msg', text: ` · 폴더 ${fmtN(cards.length)} · 세션 ${fmtN(total)}${live ? ` · 실행 중 ${live}` : ''}` }), dir ? el('span', { class: 'msg ws-path', text: dir }) : null),
-    el('div', { class: 'ws-grid' }, ...cards.map((c, i) => { const k = card(c.e, c.ss, ctx.memByCwd, ctx.tokByCwd); k.style.setProperty('--i', i); return k; })));
+    el('div', { class: 'ws-grid' }, ...cards.map((c, i) => { const k = wsCard(c.e, c.ss, ctx.memByCwd, ctx.tokByCwd); k.style.setProperty('--i', i); return k; })));
 }
 const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';
-function card(e, ss, memByCwd, tokByCwd) {
+function wsCard(e, ss, memByCwd, tokByCwd) {
   const open = WS.open.has(e.path);
   const needs = ss.filter((s) => stateOf(s) === 'blocked').length, working = ss.filter((s) => stateOf(s) === 'working').length, live = ss.filter((s) => s.live).length;
   const latest = [...ss].sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))[0];

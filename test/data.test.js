@@ -363,3 +363,13 @@ test('scanWorkspace: repos at the root are cards, other dirs are categories with
   assert.deepEqual(w.entries.map((e) => [e.name, e.kind, (e.children || []).map((k) => `${k.name}:${k.kind}`).join(',')]),
     [['claude-code-manager', 'repo', ''], ['projects', 'dir', 'P-Hyundai:repo'], ['solutions', 'dir', 'AkashiQ:repo,notes:dir']]);
 });
+
+test('renderer scripts share one global scope: no top-level name is declared twice (a clash silently drops the later script)', () => {
+  const dir = path.join(__dirname, '..', 'src', 'renderer'), seen = new Map();
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js') && x !== 'mdansi.js' && x !== 'webview-preload.js')) { // mdansi is an IIFE
+    for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/^(?:const|let|function|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+      assert.ok(!seen.has(m[1]), `${m[1]} declared in both ${seen.get(m[1])} and ${f}`);
+      seen.set(m[1], f);
+    }
+  }
+});

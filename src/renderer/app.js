@@ -57,6 +57,13 @@ function setView(v) {
 }
 $('#btn-memory').onclick = () => setView(S.view === 'memory' ? 'sessions' : 'memory');
 $('#btn-workspace').onclick = () => setView(S.view === 'workspace' ? 'sessions' : 'workspace');
+// every full-screen view (워크스페이스 · 통계 · 메모리) carries a way back: this button, Esc, or any session tab
+const viewCloseBtn = () => el('button', { class: 'view-close', text: '× 세션으로', 'data-tip': '세션 화면으로 돌아가기 (Esc)', onclick: () => setView('sessions') });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || S.view === 'sessions' || e.defaultPrevented) return;
+  if (document.querySelector('dialog[open], #term-look, .dd') || !ctx.classList.contains('hidden')) return; // those own Esc
+  setView('sessions');
+});
 $('#btn-stats').onclick = () => setView(S.view === 'stats' ? 'sessions' : 'stats');
 const menu = $('#sessions-menu');
 $('#btn-sessions').onclick = () => { menu.classList.remove('closed'); menu.classList.toggle('open'); };
@@ -579,6 +586,7 @@ function renderMemoryList() {
   $('#memory-list').replaceChildren(...rows.map((m) => memRow(m, () => selectMemory(m))));
 }
 $('#mem-search').oninput = (e) => { S.memFilter = e.target.value; renderMemoryList(); };
+$('#mem-close').onclick = () => setView('sessions');
 $('#mem-project').onchange = (e) => { S.memProject = e.target.value; renderMemoryList(); };
 
 async function selectMemory(m) {

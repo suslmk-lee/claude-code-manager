@@ -265,6 +265,7 @@ svg.heat .l4, .heat-l4 { fill:var(--acc); background:var(--acc); }
 .sess { animation:ws-up .35s var(--ease-out) both; animation-delay:calc(min(var(--i, 0), 30) * 14ms); }
 #tabs .tab .label.marquee { text-overflow:clip; } #tabs .tab:hover .label.marquee { animation:marquee var(--dur, 3s) ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) { .ws-cat, .ws-card, .sess, .marquee, .ws-summary.marquee, #tabs .tab:hover .label.marquee { animation:none; } .ws-card { transition:none; } .ws-glow { display:none; } }
+.view-close { color:var(--dim); } .view-close:hover { color:var(--fg); }
 .ws-bar { display:flex; gap:8px; align-items:center; margin:4px 0 14px; flex-wrap:wrap; }
 .ws-root { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border:1px solid var(--line); border-radius:6px; background:var(--raised); font-size:12px; }
 .ws-root .x { padding:0 4px; border:none; background:transparent; box-shadow:none; color:var(--dim); } .ws-root .x:hover { color:var(--bad); }
