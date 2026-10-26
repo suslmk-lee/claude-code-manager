@@ -89,13 +89,14 @@ function wsCategory(e, own, kids, ctx) {
   const empty = kids.filter((k) => !(ctx.bySessions.get(k.path) || []).length);
   const subN = withS.reduce((n, x) => n + x.ss.length, 0), live = withS.reduce((n, x) => n + x.ss.filter((s) => s.live).length, 0);
   const open = WS.subOpen?.has(e.path);
-  let node; // this block; the toggle swaps it for a fresh one instead of re-rendering the whole view
-  const toggle = kids.length ? el('div', { class: 'ws-sub-toggle' + (open ? ' open' : ''), onclick: () => { (WS.subOpen ||= new Set()); if (open) WS.subOpen.delete(e.path); else WS.subOpen.add(e.path); const fresh = wsCategory(e, own, kids, ctx); fresh.style.animation = 'none'; node.replaceWith(fresh); } },
-    el('span', { class: 'ws-sub-chev', text: open ? '▾' : '▸' }),
-    el('b', { text: `하위 폴더 ${fmtN(kids.length)}개` }),
-    subN ? el('span', { class: 'msg', text: ` · 세션 ${fmtN(subN)}${live ? ` (실행 중 ${live})` : ''} · ` }) : el('span', { class: 'msg', text: ' · 세션 없음' }),
-    ...withS.slice(0, 6).map((x) => el('span', { class: 'ws-sub-name' }, el('span', { class: `glyph ${stateOf(x.ss[0])} ${x.ss.some((s) => s.live) ? 'live' : 'off'}` }), `${x.k.name} ${x.ss.length}`)),
-    withS.length > 6 ? el('span', { class: 'msg', text: ` 외 ${withS.length - 6}` }) : null) : null;
+  let node; // this block; the tile swaps it for a fresh one instead of re-rendering the whole view
+  const flip = () => { (WS.subOpen ||= new Set()); if (open) WS.subOpen.delete(e.path); else WS.subOpen.add(e.path); const fresh = wsCategory(e, own, kids, ctx); fresh.style.animation = 'none'; node.replaceWith(fresh); };
+  // a square tile beside the folder's own card: subfolder count, their sessions, the active ones by name; click = expand below
+  const toggle = kids.length ? el('div', { class: 'ws-tile' + (open ? ' open' : '') + (subN ? '' : ' quiet'), onclick: flip, 'data-tip': `${e.name} 하위 폴더 ${kids.length}개${subN ? ` · 세션 ${subN}` : ' · 세션 없음'} · 누르면 ${open ? '접기' : '펼치기'}` },
+    el('div', { class: 'ws-tile-top' }, el('b', { class: 'n', text: fmtN(kids.length) }), el('span', { class: 'l', text: '하위 폴더' })),
+    subN ? el('div', { class: 'ws-tile-mid' }, el('span', { class: `glyph ${live ? 'idle' : 'off'} ${live ? 'live' : 'off'}` }), `세션 ${fmtN(subN)}${live ? ` · 실행 ${live}` : ''}`) : el('div', { class: 'ws-tile-mid l', text: '세션 없음' }),
+    el('div', { class: 'ws-tile-names' }, ...withS.slice(0, 2).map((x) => el('span', { text: `${x.k.name} ${x.ss.length}` })), withS.length > 2 ? el('span', { class: 'l', text: `외 ${withS.length - 2}` }) : null),
+    el('span', { class: 'ws-tile-chev', text: open ? '▾' : '▸' })) : null;
   const sub = open ? el('div', { class: 'ws-sub' },
     withS.length ? el('div', { class: 'ws-grid' }, ...withS.map((x, i) => { const c = wsCard(x.k, x.ss, ctx.memByCwd, ctx.tokByCwd); c.style.setProperty('--i', i); return c; })) : null,
     empty.length ? el('div', { class: 'ws-chips' }, ...empty.map((k) => el('button', { class: 'ws-chip', 'data-tip': `${k.path}${k.kind === 'dir' ? '\n(저장소 표식 없음)' : ''}`, onclick: () => { setView('sessions'); openNewSession(k.path); } }, k.name, el('span', { class: 'ws-chip-branch', 'data-path': k.path })))) : null) : null;
@@ -103,7 +104,7 @@ function wsCategory(e, own, kids, ctx) {
   const ownCard = own.length ? wsCard({ name: `${e.name} (이 폴더)`, path: e.path, kind: 'self' }, own, ctx.memByCwd, ctx.tokByCwd) : null;
   node = el('div', { class: 'ws-cat' },
     el('h3', {}, e.name, el('span', { class: 'msg', text: ` · 세션 ${fmtN(own.length + subN)}${own.length ? ` (이 폴더 ${own.length})` : ''}` }), el('span', { class: 'msg ws-path', text: e.path })),
-    ownCard ? el('div', { class: 'ws-grid' }, ownCard) : null, toggle, sub);
+    el('div', { class: 'ws-own-row' }, ownCard, toggle), sub);
   return node;
 }
 const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';

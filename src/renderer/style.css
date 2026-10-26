@@ -283,11 +283,18 @@ svg.heat .l4, .heat-l4 { fill:var(--acc); background:var(--acc); }
 .ws-meta { margin:5px 0 0 18px; display:flex; gap:12px; color:var(--dim); font-size:11px; }
 .ws-branch { font-family:ui-monospace, Menlo, monospace; color:var(--link); } .ws-branch.dirty { color:var(--warn); } .ws-branch:empty { display:none; }
 .ws-body { margin-top:10px; border-top:1px solid var(--line); padding-top:6px; }
-/* subfolders of a category: one folded line, then an indented rail with a guide line and a └ connector */
-.ws-sub-toggle { display:flex; align-items:center; gap:8px; margin:8px 0 0 6px; padding:6px 10px; border-radius:8px; cursor:pointer; color:var(--fg); font-size:12.5px; flex-wrap:wrap; }
-.ws-sub-toggle:hover { background:var(--hover); } .ws-sub-toggle.open { color:var(--acc); }
-.ws-sub-chev { width:12px; color:var(--dim); font-size:11px; }
-.ws-sub-name { display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:6px; background:var(--raised); font-size:12px; color:var(--fg); } .ws-sub-name .glyph { margin:0; width:7px; height:7px; }
+/* subfolders of a category: a square tile beside the folder's own card; opening draws an indented rail below */
+.ws-own-row { display:flex; gap:10px; align-items:stretch; }
+.ws-own-row .ws-card { flex:1 1 auto; max-width:640px; }
+.ws-tile { flex:none; width:124px; height:124px; display:flex; flex-direction:column; justify-content:space-between; padding:10px 12px; position:relative; border:1px solid var(--line); border-radius:12px; background:var(--panel); cursor:pointer; animation:ws-up .5s var(--ease-out) both; transition:transform .35s var(--ease-spring), box-shadow .35s var(--ease-out), border-color .2s; }
+.ws-tile:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.35); border-color:color-mix(in srgb, var(--line) 50%, var(--acc)); }
+.ws-tile.open { border-color:var(--acc); background:color-mix(in srgb, var(--acc) 7%, var(--panel)); }
+.ws-tile.quiet { opacity:.7; }
+.ws-tile .n { font-size:26px; font-weight:650; line-height:1; letter-spacing:-.5px; } .ws-tile .l { color:var(--dim); font-size:11px; }
+.ws-tile-top { display:flex; align-items:baseline; gap:6px; }
+.ws-tile-mid { display:flex; align-items:center; gap:5px; font-size:12px; } .ws-tile-mid .glyph { margin:0; width:7px; height:7px; }
+.ws-tile-names { display:flex; flex-direction:column; gap:1px; font-size:11px; color:var(--fg); overflow:hidden; } .ws-tile-names span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ws-tile-chev { position:absolute; right:10px; bottom:8px; color:var(--dim); font-size:11px; } .ws-tile.open .ws-tile-chev { color:var(--acc); }
 .ws-sub { position:relative; margin:4px 0 4px 15px; padding:8px 0 4px 18px; border-left:2px solid var(--line); animation:ws-up .35s var(--ease-out) both; }
 .ws-sub::before { content:''; position:absolute; left:-2px; top:0; width:14px; height:22px; border-left:2px solid var(--line); border-bottom:2px solid var(--line); border-bottom-left-radius:8px; }
 .ws-sub .ws-grid { grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); margin-bottom:8px; } .ws-sub .ws-card { padding:8px 10px; }
