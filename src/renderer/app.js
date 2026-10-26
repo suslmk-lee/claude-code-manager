@@ -144,6 +144,7 @@ function renderVersionBar() {
 const loadTabs = () => { try { return JSON.parse(localStorage.getItem('openTabs')); } catch { return null; } };
 const saveTabs = () => { if (S.booted) try { localStorage.setItem('openTabs', JSON.stringify({ tabs: S.tabs, sel: S.sel })); } catch { /* fine */ } };
 function renderTabs() {
+  { const seen = new Set(); S.tabs = S.tabs.filter((id) => !seen.has(id) && seen.add(id)); } // one tab per session, whatever path added it
   saveTabs();
   const all = [...S.local, ...S.sessions];
   $('#tabs').replaceChildren(...S.tabs.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean).map((s) => {
@@ -726,7 +727,7 @@ dlg.onclose = async () => {
   // instant feedback: a placeholder tab while `claude --bg` boots the worker (≈1–3 s), swapped for the real session
   const ph = { sessionId: 'starting-' + Date.now(), local: true, starting: true, name: name || baseName(cwd), cwd, profile: opts.profile || 'default' };
   S.local.push(ph); S.tab = 'terminal'; openSession(ph.sessionId);
-  const dropPlaceholder = (replaceWith) => { const i = S.tabs.indexOf(ph.sessionId); S.local = S.local.filter((x) => x !== ph); if (replaceWith && i !== -1) S.tabs[i] = replaceWith; else S.tabs = S.tabs.filter((x) => x !== ph.sessionId); if (S.sel === ph.sessionId) S.sel = replaceWith || S.tabs[0] || null; };
+  const dropPlaceholder = (replaceWith) => { const i = S.tabs.indexOf(ph.sessionId); S.local = S.local.filter((x) => x !== ph); if (replaceWith && i !== -1 && !S.tabs.includes(replaceWith)) S.tabs[i] = replaceWith; else S.tabs = S.tabs.filter((x) => x !== ph.sessionId); if (S.sel === ph.sessionId) S.sel = replaceWith || S.tabs[0] || null; }; // the session may already be a tab (opened from the list meanwhile)
   const r = await api.newSession({ cwd, name, prompt, ...opts }).catch((e) => ({ ok: false, output: e.message }));
   if (r.ok) {
     await loadSessions();

@@ -226,7 +226,7 @@ api.onChatEvent(({ key, msg }) => {
     if (st.s.chatNew && m.session_id && st.s.sessionId !== m.session_id) { // the placeholder tab becomes the real session
       const old = st.s.sessionId;
       st.s.sessionId = m.session_id; st.s.chatNew = false; st.s.live = true; st.s.kind = 'chat';
-      S.tabs = S.tabs.map((x) => (x === old ? m.session_id : x)); if (S.sel === old) S.sel = m.session_id;
+      S.tabs = S.tabs.includes(m.session_id) ? S.tabs.filter((x) => x !== old) : S.tabs.map((x) => (x === old ? m.session_id : x)); if (S.sel === old) S.sel = m.session_id;
       CH.delete(old); CH.set(m.session_id, st);
       st.ui?.list.querySelector('p.msg')?.remove(); // the "first message creates the session" hint is done
       renderTabs();
