@@ -48,9 +48,7 @@ function renderWorkspace() {
       const own = bySessions.get(e.path) || [], kids = e.children || [];
       const n = own.length + kids.reduce((a, k) => a + (bySessions.get(k.path) || []).length, 0);
       if (!n && !WS.showEmpty?.has(e.path)) { idle.push(e); continue; } // nothing runs here: one chip at the bottom instead of a section
-      // sessions that run in the category folder itself get a card of their own at the front
-      const entries = own.length ? [{ name: `${e.name} (이 폴더)`, path: e.path, kind: 'self' }, ...kids] : kids;
-      sections.push(wsSection(e.name, e.path, entries, ctx));
+      sections.push(wsCategory(e, own, kids, ctx));
     }
   }
   if (other.length) sections.push(wsSection('기타 · 루트 밖', null, groupOther(other), ctx, true));
@@ -83,6 +81,28 @@ function wsSection(title, dir, entries, ctx, pseudo = false) {
   return el('div', { class: 'ws-cat' },
     el('h3', {}, title, el('span', { class: 'msg', text: ` · 폴더 ${fmtN(cards.length)} · 세션 ${fmtN(total)}${live ? ` · 실행 중 ${live}` : ''}` }), dir ? el('span', { class: 'msg ws-path', text: dir }) : null),
     el('div', { class: 'ws-grid' }, ...cards.map((c, i) => { const k = wsCard(c.e, c.ss, ctx.memByCwd, ctx.tokByCwd); k.style.setProperty('--i', i); return k; })));
+}
+// a category folder: its own card (sessions running right in it) and its subfolders folded into one line — subfolders
+// with sessions are named there; opening lists them as cards, the empty ones as chips, inside an indented rail
+function wsCategory(e, own, kids, ctx) {
+  const withS = kids.map((k) => ({ k, ss: ctx.bySessions.get(k.path) || [] })).filter((x) => x.ss.length).sort((a, b) => Math.max(...b.ss.map((s) => s.lastActivity || 0)) - Math.max(...a.ss.map((s) => s.lastActivity || 0)));
+  const empty = kids.filter((k) => !(ctx.bySessions.get(k.path) || []).length);
+  const subN = withS.reduce((n, x) => n + x.ss.length, 0), live = withS.reduce((n, x) => n + x.ss.filter((s) => s.live).length, 0);
+  const open = WS.subOpen?.has(e.path);
+  const toggle = kids.length ? el('div', { class: 'ws-sub-toggle' + (open ? ' open' : ''), onclick: () => { (WS.subOpen ||= new Set()); if (open) WS.subOpen.delete(e.path); else WS.subOpen.add(e.path); renderWorkspace(); } },
+    el('span', { class: 'ws-sub-chev', text: open ? '▾' : '▸' }),
+    el('b', { text: `하위 폴더 ${fmtN(kids.length)}개` }),
+    subN ? el('span', { class: 'msg', text: ` · 세션 ${fmtN(subN)}${live ? ` (실행 중 ${live})` : ''} · ` }) : el('span', { class: 'msg', text: ' · 세션 없음' }),
+    ...withS.slice(0, 6).map((x) => el('span', { class: 'ws-sub-name' }, el('span', { class: `glyph ${stateOf(x.ss[0])} ${x.ss.some((s) => s.live) ? 'live' : 'off'}` }), `${x.k.name} ${x.ss.length}`)),
+    withS.length > 6 ? el('span', { class: 'msg', text: ` 외 ${withS.length - 6}` }) : null) : null;
+  const sub = open ? el('div', { class: 'ws-sub' },
+    withS.length ? el('div', { class: 'ws-grid' }, ...withS.map((x, i) => { const c = wsCard(x.k, x.ss, ctx.memByCwd, ctx.tokByCwd); c.style.setProperty('--i', i); return c; })) : null,
+    empty.length ? el('div', { class: 'ws-chips' }, ...empty.map((k) => el('button', { class: 'ws-chip', 'data-tip': `${k.path}${k.kind === 'dir' ? '\n(저장소 표식 없음)' : ''}`, onclick: () => { setView('sessions'); openNewSession(k.path); } }, k.name, el('span', { class: 'ws-chip-branch', 'data-path': k.path })))) : null) : null;
+  if (sub) sub.querySelectorAll('.ws-chip-branch').forEach((b) => api.gitInfo(b.dataset.path).then((g) => { if (g) b.textContent = ` ${g.branch}${g.dirty ? '*' : ''}`; }).catch(() => {}));
+  const ownCard = own.length ? wsCard({ name: `${e.name} (이 폴더)`, path: e.path, kind: 'self' }, own, ctx.memByCwd, ctx.tokByCwd) : null;
+  return el('div', { class: 'ws-cat' },
+    el('h3', {}, e.name, el('span', { class: 'msg', text: ` · 세션 ${fmtN(own.length + subN)}${own.length ? ` (이 폴더 ${own.length})` : ''}` }), el('span', { class: 'msg ws-path', text: e.path })),
+    ownCard ? el('div', { class: 'ws-grid' }, ownCard) : null, toggle, sub);
 }
 const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';
 function wsCard(e, ss, memByCwd, tokByCwd) {

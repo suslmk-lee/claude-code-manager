@@ -283,6 +283,15 @@ svg.heat .l4, .heat-l4 { fill:var(--acc); background:var(--acc); }
 .ws-meta { margin:5px 0 0 18px; display:flex; gap:12px; color:var(--dim); font-size:11px; }
 .ws-branch { font-family:ui-monospace, Menlo, monospace; color:var(--link); } .ws-branch.dirty { color:var(--warn); } .ws-branch:empty { display:none; }
 .ws-body { margin-top:10px; border-top:1px solid var(--line); padding-top:6px; }
+/* subfolders of a category: one folded line, then an indented rail with a guide line and a └ connector */
+.ws-sub-toggle { display:flex; align-items:center; gap:8px; margin:8px 0 0 6px; padding:6px 10px; border-radius:8px; cursor:pointer; color:var(--fg); font-size:12.5px; flex-wrap:wrap; }
+.ws-sub-toggle:hover { background:var(--hover); } .ws-sub-toggle.open { color:var(--acc); }
+.ws-sub-chev { width:12px; color:var(--dim); font-size:11px; }
+.ws-sub-name { display:inline-flex; align-items:center; gap:5px; padding:1px 8px; border-radius:6px; background:var(--raised); font-size:12px; color:var(--fg); } .ws-sub-name .glyph { margin:0; width:7px; height:7px; }
+.ws-sub { position:relative; margin:4px 0 4px 15px; padding:8px 0 4px 18px; border-left:2px solid var(--line); animation:ws-up .35s var(--ease-out) both; }
+.ws-sub::before { content:''; position:absolute; left:-2px; top:0; width:14px; height:22px; border-left:2px solid var(--line); border-bottom:2px solid var(--line); border-bottom-left-radius:8px; }
+.ws-sub .ws-grid { grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); margin-bottom:8px; } .ws-sub .ws-card { padding:8px 10px; }
+.ws-chip-branch { color:var(--link); font-family:ui-monospace, Menlo, monospace; font-size:11px; }
 .ws-chips { display:flex; flex-wrap:wrap; gap:6px; } .ws-chip { padding:3px 10px; font-size:12px; color:var(--dim); } .ws-chip:hover { color:var(--fg); }
 .ws-body .sess { padding:5px 4px; } .ws-actions { margin-top:8px; }
 .tables { margin:0 0 12px; color:var(--dim); font-size:12px; } .tables summary { cursor:pointer; margin-bottom:8px; } .tables h4 { margin:10px 0 6px; color:var(--fg); }
