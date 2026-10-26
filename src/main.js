@@ -50,6 +50,7 @@ ipcMain.handle('sessions:list', () => data.listSessions());
 ipcMain.handle('session:stats', (_e, id) => data.sessionStats(id));
 ipcMain.handle('stats:global', (_e, opts) => data.globalStats(opts || {}));
 ipcMain.handle('profiles:list', () => data.profiles());
+ipcMain.handle('workspace:scan', (_e, root) => data.scanWorkspace(root));
 ipcMain.handle('transcript:read', (_e, { sessionId, opts }) => data.transcript(sessionId, opts));
 ipcMain.handle('transcript:search', (_e, q) => data.searchTranscripts(q));
 ipcMain.handle('projects:list', () => data.listProjects());

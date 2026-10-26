@@ -354,3 +354,12 @@ test('daily buckets use the local (KST) calendar day', async () => {
   assert.deepEqual(Object.keys(st.days).sort(), ['2026-10-09', '2026-10-10']);
   assert.equal(st.days['2026-10-10'].output, 1);
 });
+
+test('scanWorkspace: repos at the root are cards, other dirs are categories with their repos', async () => {
+  const root = path.join(tmp, 'ws');
+  for (const d of ['solutions/AkashiQ/.git', 'solutions/notes', 'projects/P-Hyundai/.claude', 'claude-code-manager', 'node_modules/x', '.hidden/y']) fs.mkdirSync(path.join(root, d), { recursive: true });
+  fs.writeFileSync(path.join(root, 'claude-code-manager', 'package.json'), '{}');
+  const w = await data.scanWorkspace(root);
+  assert.deepEqual(w.entries.map((e) => [e.name, e.kind, (e.children || []).map((k) => `${k.name}:${k.kind}`).join(',')]),
+    [['claude-code-manager', 'repo', ''], ['projects', 'dir', 'P-Hyundai:repo'], ['solutions', 'dir', 'AkashiQ:repo,notes:dir']]);
+});

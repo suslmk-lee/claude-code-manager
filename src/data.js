@@ -745,6 +745,26 @@ async function deleteTranscript({ sessionId, projectDir, profile: profileId }) {
   return { ok: true };
 }
 
+// ---------- workspace: the folders under a root, two levels deep ----------
+// A dir is a "repo" when it carries a .git, package.json, CLAUDE.md or .claude; otherwise it is a category whose
+// subdirs are listed. Hidden dirs, node_modules and the like are skipped. Pure fs: sessions are joined in the renderer.
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'target', 'venv', '.venv', '__pycache__']);
+const REPO_MARKERS = ['.git', 'package.json', 'CLAUDE.md', '.claude', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
+async function scanWorkspace(root) {
+  root = path.resolve(root);
+  const isRepo = (dir) => REPO_MARKERS.some((m) => fs.existsSync(path.join(dir, m)));
+  const list = async (dir) => (await fsp.readdir(dir, { withFileTypes: true }).catch(() => []))
+    .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !SKIP_DIRS.has(e.name)).map((e) => e.name).sort((a, b) => a.localeCompare(b));
+  const out = [];
+  for (const name of await list(root)) {
+    const dir = path.join(root, name);
+    if (isRepo(dir)) { out.push({ name, path: dir, kind: 'repo' }); continue; }
+    const kids = (await list(dir)).map((n) => ({ name: n, path: path.join(dir, n), kind: isRepo(path.join(dir, n)) ? 'repo' : 'dir' }));
+    out.push({ name, path: dir, kind: 'dir', children: kids });
+  }
+  return { root, entries: out };
+}
+
 // ---------- session lifecycle (delegated to the CLI) ----------
 
 async function agentAction(action, id, profileId) {
@@ -782,5 +802,5 @@ async function newSession(opts) {
 module.exports = {
   IS_WIN, HOME, PROJECTS, env, findClaude, profiles: listProfiles, launcher, encodeProject, parseFrontmatter, ingest, emptyStats,
   listSessions, listAgents, sessionStats, fileStats, globalStats, readPins, setPinned, listProjects, transcript, searchTranscripts, findTranscript, streamLines, ingestTurn, readTailTitle, usage, gitInfo, account, listMemory, readMemory, copyMemory, writeMemory, deleteMemory, createMemory, MEMORY_TYPES,
-  agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; },
+  scanWorkspace, agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; },
 };

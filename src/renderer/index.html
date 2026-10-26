@@ -29,6 +29,7 @@
     <div class="menu" id="gear-menu">
       <button id="btn-gear" class="icon" aria-label="메뉴"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <div class="flyout gear-pop">
+        <button class="nav" id="btn-workspace"><svg viewBox="0 0 24 24"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>워크스페이스</button>
         <button class="nav" id="btn-stats"><svg viewBox="0 0 24 24"><path d="M5 19.5V12M12 19.5V5M19 19.5v-9"/></svg>통계</button>
         <button class="nav" id="btn-memory"><svg viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M8 9.5h8M8 13h8M8 16.5h5"/></svg>메모리</button>
         <div class="sep"></div>
@@ -57,6 +58,9 @@
     <section id="memory-detail"><div class="empty">메모리를 선택하세요</div></section>
   </main>
 
+  <main id="view-workspace" class="view hidden">
+    <section id="workspace-detail" class="pane ws-pane"></section>
+  </main>
   <main id="view-stats" class="view hidden">
     <section id="stats-detail" class="pane stats-pane"></section>
   </main>
@@ -128,6 +132,7 @@
   <script src="app.js"></script>
   <script src="termlook.js"></script>
   <script src="select.js"></script>
+  <script src="workspace.js"></script>
   <script src="stats.js"></script>
   <script src="transcript.js"></script>
   <script src="chat.js"></script>

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   sessionStats: (id) => ipcRenderer.invoke('session:stats', id),
   globalStats: (opts) => ipcRenderer.invoke('stats:global', opts),
   listProfiles: () => ipcRenderer.invoke('profiles:list'),
+  scanWorkspace: (root) => ipcRenderer.invoke('workspace:scan', root),
   transcript: (sessionId, opts) => ipcRenderer.invoke('transcript:read', { sessionId, opts }),
   searchTranscripts: (q) => ipcRenderer.invoke('transcript:search', q),
   listProjects: () => ipcRenderer.invoke('projects:list'),

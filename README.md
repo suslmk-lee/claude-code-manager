@@ -54,6 +54,12 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   Per-session scans keep per-model and per-day buckets, so the whole page is a sum of cached scans.
 - **대화 tab: tool rows hidden by default** — ⚙ tool calls (Bash, Write, …) and their 도구 결과 rows are hidden
   unless the 도구 호출 checkbox in the bar is on (remembered). A full-text search hit inside a tool row reveals them.
+- **워크스페이스 view (gear menu)** — the folders under one or more root dirs (default `~/workspace`, change/add with
+  the folder picker; remembered). First-level folders are categories, repos (a `.git`, `package.json`, `CLAUDE.md`,
+  `.claude`…) are cards, and sessions attach to the deepest folder containing their working dir (worktrees count for
+  their repo). A card shows a state dot, session counts (working/needs input), the latest session's summary, branch,
+  memory count and output tokens; expanding it lists the sessions and offers 여기서 새 세션. Folders without sessions
+  collapse into chips; sessions outside every root appear under 기타.
 - **Profiles (several Claude Code config dirs)** — besides `~/.claude`, any sibling dir named `~/.claude-<id>` that
   holds a `settings.json` or `projects/` is a profile (e.g. `~/.claude-samanda`: the same Claude Code pointed at another
   model/gateway, with its own sessions, transcripts, jobs and memory). Sessions, memory and stats from every profile

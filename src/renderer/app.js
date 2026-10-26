@@ -46,15 +46,17 @@ const cur = () => S.sessions.find((s) => s.sessionId === S.sel) || S.local.find(
 // ---------- navigation ----------
 function setView(v) {
   S.view = v;
-  for (const k of ['memory', 'stats']) { $(`#btn-${k}`).classList.toggle('active', v === k); $(`#view-${k}`).classList.toggle('hidden', v !== k); }
+  for (const k of ['memory', 'stats', 'workspace']) { $(`#btn-${k}`).classList.toggle('active', v === k); $(`#view-${k}`).classList.toggle('hidden', v !== k); }
   $('#view-sessions').classList.toggle('hidden', v !== 'sessions');
   if (typeof syncBrowserPane === 'function') syncBrowserPane(v === 'sessions' ? cur() : null);
   renderTabs();
   if (v === 'memory') loadMemory();
   if (v === 'stats') loadStats();
+  if (v === 'workspace' && typeof loadWorkspace === 'function') loadWorkspace();
   if (v === 'sessions') fitCurrent();
 }
 $('#btn-memory').onclick = () => setView(S.view === 'memory' ? 'sessions' : 'memory');
+$('#btn-workspace').onclick = () => setView(S.view === 'workspace' ? 'sessions' : 'workspace');
 $('#btn-stats').onclick = () => setView(S.view === 'stats' ? 'sessions' : 'stats');
 const menu = $('#sessions-menu');
 $('#btn-sessions').onclick = () => { menu.classList.remove('closed'); menu.classList.toggle('open'); };
@@ -677,8 +679,9 @@ dlgMem.onclose = async () => {
 const dlg = $('#dlg-new');
 const OPTS = { profile: '#new-profile', model: '#new-model', effort: '#new-effort', permissionMode: '#new-permission', agent: '#new-agent', mode: '#new-mode' };
 function readOpts() { const o = {}; for (const [k, sel] of Object.entries(OPTS)) o[k] = $(sel).value.trim(); return o; }
-$('#btn-new').onclick = () => {
-  $('#new-cwd').value = isAbs(cur()?.cwd) ? cur().cwd : '';
+$('#btn-new').onclick = () => openNewSession();
+function openNewSession(cwd) { // cwd: preset folder (the workspace view's "여기서 새 세션")
+  $('#new-cwd').value = isAbs(cwd) ? cwd : isAbs(cur()?.cwd) ? cur().cwd : '';
   const ps = $('#new-profile');
   ps.replaceChildren(...S.profiles.map((p) => el('option', { value: p.id === 'default' ? '' : p.id, text: p.id === 'default' ? 'Claude (기본 · ~/.claude)' : `${p.name}${p.model ? ` · ${p.model}` : ''} (${shortPath(p.dir)})` })));
   ps.closest('label').hidden = S.profiles.length < 2; // one profile: nothing to choose
