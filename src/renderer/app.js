@@ -114,6 +114,10 @@ function followContinuation(oldId, newId) {
 }
 // ---------- needs-input: notify on the transition, badge until the tab is opened ----------
 const needsInput = (s) => !!(s.job?.needs || s.state === 'blocked');
+// what the dot, the list group and the card counts show for a live session: its current activity (daemon status busy/idle),
+// not the job's own long-term state — a job says "working" while follow-ups are pending even as its process sits idle at the prompt.
+// A stopped session keeps the job's last state (done / working) so a hollow ring still tells how it was left.
+const activity = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : s.live ? (s.status === 'busy' ? 'working' : 'idle') : (s.state || s.status || '');
 let prevNeeds = null; // null until the first load, so sessions already waiting at startup do not fire
 function trackNeedsInput() {
   const now = new Set(S.sessions.filter(needsInput).map((s) => s.sessionId));
@@ -157,7 +161,7 @@ function renderTabs() {
   saveTabs();
   const all = [...S.local, ...S.sessions];
   $('#tabs').replaceChildren(...S.tabs.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean).map((s) => {
-    const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
+    const st = activity(s);
     const n = S.tabs.indexOf(s.sessionId) + 1;
     const t = el('div', { class: 'tab glass' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true',
       // a cut-off name drifts to show the rest while hovered
@@ -229,7 +233,7 @@ function renderSessionList() {
     for (const s of arr) { const r = sessionRow(s); r.style.setProperty('--i', list.childElementCount); list.append(r); } // stagger index
   };
   const bucket = (s) => s.pinned ? 'pinned' : (s.job?.needs || s.state === 'blocked') ? 'needs'
-    : (s.state === 'working' || s.status === 'busy') ? 'working' : s.job ? 'done' : 'other';
+    : activity(s) === 'working' ? 'working' : s.job ? 'done' : 'other';
   const by = {};
   const q = (S.sessFilter || '').toLowerCase();
   const match = (s) => !q || `${s.name} ${s.cwd} ${s.profile || ''} ${s.state || ''} ${s.status || ''} ${s.job?.needs || s.job?.detail || ''}`.toLowerCase().includes(q);
@@ -248,7 +252,7 @@ function linksLabel(job) {
 }
 const profileBadge = (s) => (s.profile && s.profile !== 'default' ? el('span', { class: 'pbadge', text: s.profile, 'data-tip': `프로파일 ${s.profile} (${(S.profiles.find((p) => p.id === s.profile) || {}).dir || ''})` }) : null);
 function sessionRow(s) {
-  const st = s.job?.needs ? 'blocked' : (s.state || s.status || '');
+  const st = activity(s);
   const detail = s.job?.needs || s.job?.detail || s.lastPrompt || s.job?.intent || '';
   return el('div', { class: 'sess' + (s.sessionId === S.sel ? ' sel' : ''), 'data-tip': `${shortPath(s.cwd)}\n${detail}`, onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s) },
     el('span', { class: 'name' }, el('span', { class: `glyph ${st} ${s.live ? 'live' : 'off'}` }), s.name, profileBadge(s)),

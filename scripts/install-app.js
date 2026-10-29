@@ -67,17 +67,26 @@ if (process.platform === 'darwin') {
   const APP = `/Applications/${NAME}.app`
   const SRC = path.join(root, 'dist/mac-arm64', `${NAME}.app`)
   const proc = `${NAME}.app/Contents/MacOS`
-  const running = () => quiet(`pgrep -f "${proc}"`) === 0
-  say(`quit running app (osascript, pkill after 5s) if "${proc}" is running`)
+  // by process name and by path: a copy relaunched by macOS at login once slipped past the path match, kept running the
+  // old binary under the freshly copied bundle, and `open -a` only brought that stale window forward
+  const pids = () => (spawnSync(`pgrep -x "${NAME}"; pgrep -f "${proc}/${NAME}"`, { shell: true, encoding: 'utf8' }).stdout || '').split(/\s+/).filter(Boolean)
+  const running = () => pids().length > 0
+  say(`quit running app (osascript, pkill after 5s) if "${NAME}" is running`)
   if (!dry && running()) {
-    console.log('quitting running app…')
+    console.log(`quitting running app… (pid ${pids().join(', ')})`)
     quiet(`osascript -e 'quit app "${NAME}"'`)
     for (let i = 0; i < 5 && running(); i++) sleep(1000)
-    quiet(`pkill -f "${proc}"`)
+    if (running()) { quiet(`pkill -x "${NAME}"`); quiet(`pkill -f "${proc}/${NAME}"`); sleep(1000) }
+    if (running()) { console.error(`could not quit the running app (pid ${pids().join(', ')}) — quit it yourself and rerun`); process.exit(1) }
   }
   must(sh(`rm -rf "${APP}"`), 'rm')
   must(sh(`ditto "${SRC}" "${APP}"`), 'ditto')
-  if (launch) sh(`open -a "${APP}"`)
+  if (launch) {
+    sh(`open -a "${APP}"`)
+    let pid = []
+    for (let i = 0; i < 10 && !(pid = pids()).length; i++) sleep(500)
+    console.log(pid.length ? `relaunched (pid ${pid.join(', ')})` : 'relaunch: no process seen after 5s — open the app yourself')
+  }
   say(dry ? `installed → ${APP}` : `installed → ${APP} (${human(dirSize(APP))})`)
 } else if (process.platform === 'win32') {
   const SRC = path.join(root, 'dist', 'win-unpacked')

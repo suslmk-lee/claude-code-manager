@@ -1,5 +1,5 @@
 'use strict';
-/* global $, el, S, fmtN, fmtTok, shortPath, api, askConfirm, turnEl, TR, renderTabs, renderDetail, marked, openSession, attach, loadSessions, cur */
+/* global $, el, S, fmtN, fmtTok, shortPath, api, askConfirm, activity, turnEl, TR, renderTabs, renderDetail, marked, openSession, attach, loadSessions, cur */
 // 대화 탭의 챗 레이어: composer under the transcript, streaming assistant text, tool lines, permission / question cards.
 
 const CH = new Map(); // key (sessionId) → { key, s, busy, model, pending: Map<id, req>, stream: { text, el } | null, status, closed }
@@ -289,7 +289,7 @@ const TACT = new Map(); // sessionId → activity element for running-terminal c
 function terminalActivity(s) {
   const e = TACT.get(s.sessionId); if (!e?.isConnected) return;
   const pane = e.closest('.pane'), stick = pane && atBottom(pane);
-  const working = s.live && (s.state === 'working' || s.status === 'busy') && !(s.job?.needs || s.state === 'blocked');
+  const working = activity(s) === 'working';
   const was = { hidden: e.classList.contains('hidden'), text: e.querySelector('.phase').textContent };
   e.classList.toggle('hidden', !working);
   if (working) e.querySelector('.phase').textContent = s.job?.detail || '작업 중…';

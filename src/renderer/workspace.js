@@ -1,5 +1,5 @@
 'use strict';
-/* global $, el, S, api, fmtN, fmtTok, fmtAgo, shortPath, openSession, openNewSession, showCtx, askConfirm, loadSessions, WORKTREE_RE, sessionDir, sessionRow, profileBadge, isAbs */
+/* global $, el, S, api, fmtN, fmtTok, fmtAgo, shortPath, openSession, openNewSession, showCtx, askConfirm, loadSessions, activity, WORKTREE_RE, sessionDir, sessionRow, profileBadge, isAbs */
 // 워크스페이스 view: the folders under one or more root dirs (default ~/workspace), one level of categories, repos as
 // cards joined with the sessions that run in them: counts by state, the latest session's summary, branch, memory, tokens.
 
@@ -131,7 +131,7 @@ function wsCategory(e, own, kids, ctx) {
 // each category gets a stable colour from its name: the icon, the own card's edge and the tile's number share it
 const catColor = (name) => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${h % 360} 58% 62%)`; };
 const folderIcon = () => { const w = document.createElement('span'); w.className = 'ws-cat-ico'; w.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>'; return w; };
-const stateOf = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : (s.state === 'working' || s.status === 'busy') ? 'working' : s.live ? 'idle' : 'off';
+const stateOf = (s) => { const a = activity(s); return a === 'blocked' || a === 'working' ? a : s.live ? 'idle' : 'off'; };
 function wsCard(e, ss, memByCwd, tokByCwd) {
   const open = WS.open.has(e.path);
   const needs = ss.filter((s) => stateOf(s) === 'blocked').length, working = ss.filter((s) => stateOf(s) === 'working').length, live = ss.filter((s) => s.live).length;
