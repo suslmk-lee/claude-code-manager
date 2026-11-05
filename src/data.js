@@ -197,10 +197,21 @@ function fetchUsage(token) {
   });
 }
 let usageFetcher = fetchUsage;
+// The OAuth credential: ~/.claude/.credentials.json where Claude Code writes a file, else (macOS) its Keychain item — read
+// once via `security`, memoised 10 min or until the token expires (Claude Code refreshes the item; we never write it).
+let keychainCred = { at: 0, v: null };
+async function keychainCredential() {
+  if (process.platform !== 'darwin') return null;
+  if (keychainCred.v && Date.now() - keychainCred.at < 600000 && keychainCred.v.expiresAt > Date.now()) return keychainCred.v;
+  const v = await new Promise((res) => execFile('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'], { timeout: 5000 }, (e, out) => { if (e) return res(null); try { res(JSON.parse(String(out)).claudeAiOauth || null); } catch { res(null); } }));
+  keychainCred = { at: Date.now(), v };
+  return v;
+}
+let credReader = async () => (await readJson(path.join(HOME, '.credentials.json'), null))?.claudeAiOauth || keychainCredential();
 async function ownUsage() {
   if (own.body && Date.now() - own.at < USAGE_TTL) return own.body;
   if (Date.now() < own.retryAt) return null;
-  const cred = (await readJson(path.join(HOME, '.credentials.json'), null))?.claudeAiOauth; // absent on macOS (Keychain) → no fetch
+  const cred = await credReader();
   if (!cred?.accessToken || !(cred.expiresAt > Date.now())) return null;
   own.inflight ||= (async () => {
     try {
@@ -217,13 +228,16 @@ async function ownUsage() {
 async function usage() {
   // scoped limits (e.g. a per-model weekly cap such as Fable) ride along in `limits`; the status-line cache fallback has none
   const scoped = (u) => (Array.isArray(u?.limits) ? u.limits : []).filter((l) => l.scope?.model?.display_name && typeof l.percent === 'number').map((l) => ({ name: l.scope.model.display_name, group: l.group || l.kind, pct: l.percent, resetsAt: l.resets_at || null, active: !!l.is_active }));
-  const pick = (u, at) => u?.five_hour ? { fetchedAt: at || null, fiveHour: { pct: u.five_hour.utilization, resetsAt: u.five_hour.resets_at }, sevenDay: { pct: u.seven_day?.utilization, resetsAt: u.seven_day?.resets_at }, scoped: scoped(u) } : null;
+  const pick = (u, at, source) => u?.five_hour ? { fetchedAt: at || null, source: source || null, fiveHour: { pct: u.five_hour.utilization, resetsAt: u.five_hour.resets_at }, sevenDay: { pct: u.seven_day?.utilization, resetsAt: u.seven_day?.resets_at }, scoped: scoped(u) } : null;
   const cfg = await readJson(CLAUDE_JSON, null);
-  const cc = pick(cfg?.cachedUsageUtilization?.utilization, cfg?.cachedUsageUtilization?.fetchedAtMs);
+  const cc = pick(cfg?.cachedUsageUtilization?.utilization, cfg?.cachedUsageUtilization?.fetchedAtMs, 'claude-code');
   if (cc && Date.now() - cc.fetchedAt < USAGE_STALE) return cc;
   const mine = await ownUsage();
-  return (mine && pick(mine, own.at)) || cc
-    || pick(await readJson(path.join(HOME, 'statusline_cache.json'), null), null);
+  if (mine) return pick(mine, own.at, 'app');
+  // no fresh figure anywhere: the newer of Claude Code's cache and its status-line cache (which it refreshes more often)
+  const sl = await readJson(path.join(HOME, 'statusline_cache.json'), null);
+  const slp = pick(sl, sl?.cached_at ? Date.parse(sl.cached_at) || null : null, 'statusline');
+  return [cc, slp].filter(Boolean).sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0))[0] || null;
 }
 // Logged-in account: the profile Claude Code stores after login, plus `claude auth status` (cached 5 min).
 let authCache = { at: 0, v: null };
@@ -848,5 +862,5 @@ async function newSession(opts) {
 module.exports = {
   IS_WIN, HOME, PROJECTS, env, findClaude, profiles: listProfiles, launcher, encodeProject, parseFrontmatter, ingest, emptyStats,
   listSessions, listAgents, sessionStats, fileStats, globalStats, readPins, setPinned, listProjects, transcript, searchTranscripts, findTranscript, streamLines, ingestTurn, readTailTitle, usage, gitInfo, account, listMemory, readMemory, copyMemory, writeMemory, deleteMemory, createMemory, MEMORY_TYPES,
-  scanWorkspace, agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, deleteTranscript, setCacheDir: (d) => { CACHE = d; }, setClaudeJson: (p) => { CLAUDE_JSON = p; }, setUsageFetcher: (f) => { usageFetcher = f || fetchUsage; Object.assign(own, { at: 0, body: null, fails: 0, retryAt: 0, inflight: null }); },
+  scanWorkspace, agentAction, newSession, sessionFlags, resumeInBackground, cliVersion, liveVersions, respawnAll, EFFORTS, PERMISSION_MODES, renameSession, setCredReader: (f) => { credReader = f; }, deleteTranscript, setCacheDir: (d) => { CACHE = d; }, setClaudeJson: (p) => { CLAUDE_JSON = p; }, setUsageFetcher: (f) => { usageFetcher = f || fetchUsage; Object.assign(own, { at: 0, body: null, fails: 0, retryAt: 0, inflight: null }); },
 };

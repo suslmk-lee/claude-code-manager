@@ -390,7 +390,8 @@ test('usage: own fetch when the Claude Code cache is missing/stale', async () =>
   const cc = (ms, pct) => fs.writeFileSync(cj, JSON.stringify({ cachedUsageUtilization: { fetchedAtMs: ms, utilization: { five_hour: { utilization: pct }, seven_day: { utilization: pct } } } }));
   const creds = (exp) => fs.writeFileSync(cred, JSON.stringify({ claudeAiOauth: { accessToken: 'tok', expiresAt: exp } }));
   let calls = 0, fail = false;
-  const reset = () => { calls = 0; fail = false; data.setUsageFetcher(async (t) => { calls++; assert.equal(t, 'tok'); if (fail) throw new Error('429'); return body; }); };
+  const fileCred = async () => { try { return JSON.parse(fs.readFileSync(cred, 'utf8')).claudeAiOauth; } catch { return null; } }; // the file only: keep the machine's Keychain out of the test
+  const reset = () => { calls = 0; fail = false; data.setCredReader(fileCred); data.setUsageFetcher(async (t) => { calls++; assert.equal(t, 'tok'); if (fail) throw new Error('429'); return body; }); };
   const rm = (f) => fs.rmSync(f, { force: true });
 
   reset(); rm(cj); rm(cred); rm(sl);
@@ -409,7 +410,17 @@ test('usage: own fetch when the Claude Code cache is missing/stale', async () =>
 
   reset(); creds(Date.now() + 3600e3); fail = true; rm(cj);
   fs.writeFileSync(sl, JSON.stringify({ five_hour: { utilization: 33 }, seven_day: { utilization: 44 } }));
-  u = await data.usage(); assert.equal(calls, 1); assert.equal(u.fiveHour.pct, 33); // error → statusline fallback
+  u = await data.usage(); assert.equal(calls, 1); assert.equal(u.fiveHour.pct, 33); assert.equal(u.source, 'statusline'); // error → statusline fallback
+
+  // the newer cache wins when nothing is fresh: a 2-day-old CC cache loses to a status-line cache from 10 minutes ago, and vice versa
+  reset(); rm(cred); cc(Date.now() - 2 * 86400e3, 5);
+  fs.writeFileSync(sl, JSON.stringify({ cached_at: new Date(Date.now() - 10 * 60e3).toISOString(), five_hour: { utilization: 33 }, seven_day: { utilization: 44 } }));
+  u = await data.usage(); assert.equal(calls, 0); assert.equal(u.fiveHour.pct, 33);
+  cc(Date.now() - 6 * 60e3, 7); u = await data.usage(); assert.equal(u.fiveHour.pct, 7); assert.equal(u.source, 'claude-code');
+
+  // macOS: no credentials file, the credential comes from the Keychain reader → own fetch
+  reset(); rm(cred); data.setCredReader(async () => ({ accessToken: 'tok', expiresAt: Date.now() + 3600e3 }));
+  u = await data.usage(); assert.equal(calls, 1); assert.equal(u.fiveHour.pct, 10); assert.equal(u.source, 'app');
   await data.usage(); assert.equal(calls, 1); // backoff: no second request
   rm(sl); rm(cred); data.setUsageFetcher(null);
 });

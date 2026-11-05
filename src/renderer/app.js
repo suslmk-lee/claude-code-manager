@@ -897,7 +897,7 @@ async function renderProfilePop() {
     u ? el('div', {},
       el('div', { class: 'row2' }, el('span', { text: '5시간' }), el('span', { text: `${u.fiveHour.pct}% · ${fmtUntil(u.fiveHour.resetsAt) || '곧'} 뒤 초기화` })), bar(u.fiveHour.pct),
       el('div', { class: 'row2' }, el('span', { text: '7일' }), el('span', { text: `${u.sevenDay.pct}% · ${fmtUntil(u.sevenDay.resetsAt) || '곧'} 뒤 초기화` })), bar(u.sevenDay.pct),
-      el('div', { class: 'msg', text: `사용량 캐시 ${u.fetchedAt ? fmtAgo(u.fetchedAt) + ' 갱신' : ''} · Claude Code가 세션 중에 갱신합니다` })) : el('div', { class: 'msg', text: '사용량 캐시 없음' }),
+      el('div', { class: 'msg', text: `사용량 캐시 ${u.fetchedAt ? fmtAgo(u.fetchedAt) + ' 갱신' : ''} · ${u.source === 'app' ? '앱이 직접 조회' : u.source === 'statusline' ? 'Claude Code 상태줄 캐시' : 'Claude Code가 세션 중에 갱신합니다'}` })) : el('div', { class: 'msg', text: '사용량 캐시 없음' }),
     el('div', { class: 'row right', style: 'margin-top:8px' }, el('button', { text: '다시 읽기', onclick: () => { usageCache.at = 0; renderProfile().then(renderProfilePop); } })));
 }
 $('#btn-profile').onclick = () => { pmenu.classList.toggle('open'); if (pmenu.classList.contains('open')) renderProfilePop(); }; // click pins it open
