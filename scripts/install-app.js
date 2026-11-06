@@ -82,10 +82,14 @@ if (process.platform === 'darwin') {
   must(sh(`rm -rf "${APP}"`), 'rm')
   must(sh(`ditto "${SRC}" "${APP}"`), 'ditto')
   if (launch) {
+    const wait = () => { let pid = []; for (let i = 0; i < 10 && !(pid = pids()).length; i++) sleep(500); return pid }
     sh(`open -a "${APP}"`)
-    let pid = []
-    for (let i = 0; i < 10 && !(pid = pids()).length; i++) sleep(500)
-    console.log(pid.length ? `relaunched (pid ${pid.join(', ')})` : 'relaunch: no process seen after 5s — open the app yourself')
+    let pid = wait()
+    if (!pid.length) { // LaunchServices sometimes ignores `open` right after the bundle was replaced: start the binary itself, detached
+      spawn(path.join(APP, 'Contents/MacOS', NAME), [], { detached: true, stdio: 'ignore' }).unref()
+      pid = wait()
+    }
+    console.log(pid.length ? `relaunched (pid ${pid.join(', ')})` : 'relaunch: no process seen — open the app yourself')
   }
   say(dry ? `installed → ${APP}` : `installed → ${APP} (${human(dirSize(APP))})`)
 } else if (process.platform === 'win32') {

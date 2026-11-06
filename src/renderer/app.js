@@ -928,6 +928,31 @@ api.onMemoryChanged(() => { S.memory = null; if (S.view === 'memory') loadMemory
 $('#btn-refresh').onclick = () => { S.memory = null; loadSessions(); if (S.view === 'memory') loadMemory(); };
 const gearMenu = $('#gear-menu'); // hover menu like 세션 ▾: a click on an item shuts it until the pointer leaves
 $('#app-ver').textContent = api.appVersion;
+// ---------- app update: a GitHub Release newer than this build puts a button in the header; a click downloads this machine's
+// installer into ~/Downloads and opens it (the user drags the app over the installed one). 톱니 메뉴 → 업데이트 확인 asks now. ----------
+let UPD = null;
+function showUpdate(info) {
+  UPD = info; const b = $('#btn-update');
+  if (!info || !info.newer) { b.hidden = true; return; }
+  b.hidden = false; b.textContent = `업데이트 v${info.version}`;
+  b.dataset.tip = `${info.name || info.tag}${info.publishedAt ? ` · ${fmtLocalDate(info.publishedAt)}` : ''}\n${info.asset ? `누르면 ${info.asset.name}을(를) 내려받아 엽니다` : '이 플랫폼용 파일이 없어 릴리스 페이지를 엽니다'}${info.notes ? `\n\n${info.notes.slice(0, 400)}` : ''}`;
+}
+api.onUpdate(showUpdate);
+api.onUpdateProgress(({ got, total }) => { $('#btn-update').textContent = total ? `내려받는 중 ${Math.round(got / total * 100)}%` : `내려받는 중 ${fmtBytes(got)}`; });
+$('#btn-update').onclick = async () => {
+  const b = $('#btn-update');
+  if (!UPD?.asset) { api.openReleasePage(UPD?.url); return; }
+  b.disabled = true; const r = await api.downloadUpdate(); b.disabled = false; b.textContent = `업데이트 v${UPD.version}`;
+  if (r?.error) { askConfirm(`내려받기 실패: ${r.error}`, { title: '업데이트', ok: '확인', notice: true }); return; }
+  askConfirm(`${r.file}\n\n열린 설치 이미지의 앱을 /Applications에 끌어 넣어 덮어쓴 뒤 이 앱을 다시 실행하면 v${UPD.version}입니다. 열어 둔 탭과 세션은 그대로입니다.`, { title: `v${UPD.version} 내려받음`, ok: '확인', danger: false, notice: true });
+};
+$('#btn-check-update').onclick = async (e) => {
+  e.stopPropagation(); const b = $('#btn-check-update'); b.textContent = '확인 중…';
+  const r = await api.checkUpdate(true); b.textContent = '업데이트 확인';
+  if (r?.error) { askConfirm(`확인 실패: ${r.error}`, { title: '업데이트', ok: '확인', notice: true }); return; }
+  showUpdate(r);
+  if (!r.newer) askConfirm(r.none ? `아직 게시된 릴리스가 없습니다. 지금 버전은 v${api.appVersion}입니다.` : `지금 버전 v${api.appVersion}이 최신입니다 (최신 릴리스 ${r.tag}).`, { title: '업데이트', ok: '확인', danger: false, notice: true });
+};
 gearMenu.querySelector('.gear-pop').addEventListener('click', (e) => { if (e.target.closest('button')) { gearMenu.classList.remove('open'); gearMenu.classList.add('closed'); } });
 gearMenu.onmouseleave = () => gearMenu.classList.remove('closed', 'open');
 $('#btn-gear').onclick = () => { gearMenu.classList.remove('closed'); gearMenu.classList.toggle('open'); };

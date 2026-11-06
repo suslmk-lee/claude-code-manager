@@ -102,6 +102,24 @@ ipcMain.handle('chat:list', () => chat.list());
 
 ipcMain.on('wv:preload', (e) => { e.returnValue = 'file://' + path.join(__dirname, 'webview-preload.js'); });
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });
+// ---- app update (GitHub Releases): the header shows a button when a newer tag is published; the check runs at start and every 6 h ----
+const update = require('./update');
+const noRelease = { tag: '', version: '', newer: false, none: true, url: `https://github.com/${update.REPO}/releases` };
+const checkUpdate = (force) => update.latest(app.getVersion(), { force }).catch((e) => (/http 404/.test(e.message) ? noRelease : { error: e.message }));
+ipcMain.handle('update:check', (_e, force) => checkUpdate(!!force));
+ipcMain.handle('update:download', async () => {
+  try {
+    const info = await update.latest(app.getVersion());
+    const file = await update.fetchAsset(info, app.getPath('downloads'), (got, total) => { if (win && !win.isDestroyed()) win.webContents.send('update:progress', { got, total }); });
+    const err = await shell.openPath(file); // a dmg mounts and opens in Finder; an exe runs the installer
+    return err ? { file, error: err } : { file };
+  } catch (e) { return { error: e.message }; }
+});
+ipcMain.on('update:open', (_e, url) => { if (/^https:\/\/github\.com\//.test(String(url))) shell.openExternal(url); });
+function scheduleUpdateChecks() {
+  const tell = async () => { const r = await checkUpdate(false); if (r && r.newer && win && !win.isDestroyed()) win.webContents.send('update:available', r); };
+  setTimeout(tell, 20000); setInterval(tell, 6 * 3600000);
+}
 // browser pane screenshots: captured here (the sandboxed renderer has no Buffer for toPNG) and saved under
 // userData/shots so Claude can Read them by path; a small data URL comes back for the chip thumbnail
 ipcMain.handle('shots:capture', async (_e, { wcId, rect, name }) => {
@@ -271,6 +289,7 @@ function buildMenu() {
 }
 
 app.whenReady().then(() => {
+  scheduleUpdateChecks();
   if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '..', 'build', 'icon.png')); // dev runs show our icon too
   buildMenu();
   createWindow();
