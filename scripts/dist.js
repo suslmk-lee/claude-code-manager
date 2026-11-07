@@ -2,7 +2,7 @@
 // (what `pack` and install-app use); a bare `electron-builder` would only emit the dir again on macOS.
 // Windows passes npmRebuild=false: node-pty ships N-API prebuilds, a node-gyp rebuild would need VS Build Tools.
 const { spawnSync } = require('child_process')
-const args = { darwin: '--mac dmg', win32: '--win nsis -c.npmRebuild=false' }[process.platform]
+const args = { darwin: '--mac dmg --publish never', win32: '--win nsis -c.npmRebuild=false --publish never' }[process.platform] // publishing is scripts/release.js's job (gh); the npm script name `release` would otherwise trigger electron-builder's own
 if (!args) { console.error(`dist: unsupported platform ${process.platform}`); process.exit(1) }
 // every build gets its own version
 spawnSync('node scripts/bump-version.js', { stdio: 'inherit', shell: true, cwd: require('path').join(__dirname, '..') })
