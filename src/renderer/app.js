@@ -142,7 +142,7 @@ const outdated = () => S.sessions.filter((s) => s.live && s.kind === 'background
 function renderVersionBar() {
   const bar = $('#version-bar'), old = outdated(), bg = S.sessions.filter((s) => s.live && s.kind === 'background');
   bar.replaceChildren(...[ // native replaceChildren would print a null as "null"
-    el('span', { class: 'msg', text: `Manager v${api.appVersion} · Claude Code v${S.cliVersion || '?'} · 실행 중인 bg 세션 ${bg.length}개` }),
+    el('span', { class: 'msg' }, el('span', { class: 'ver-link', text: `Manager v${api.appVersion}`, 'data-tip': '누르면 새 버전이 있는지 확인합니다', onclick: (e) => { e.stopPropagation(); checkUpdateInline(e.currentTarget.nextSibling); } }), el('span', { id: 'ver-status-bar' }), ` · Claude Code v${S.cliVersion || '?'} · 실행 중인 bg 세션 ${bg.length}개`),
     old.length ? el('span', { class: 'pill', text: `구버전 ${old.length}개` }) : null,
     el('button', { class: old.length ? 'primary' : '', text: '모두 재시작 (respawn --all)', disabled: bg.length ? null : 'true', onclick: async () => {
       const names = (old.length ? old : bg).map((s) => `· ${s.name} (v${s.version || '?'})`).join('\n');
@@ -939,20 +939,24 @@ function showUpdate(info) {
 }
 api.onUpdate(showUpdate);
 api.onUpdateProgress(({ got, total }) => { $('#btn-update').textContent = total ? `내려받는 중 ${Math.round(got / total * 100)}%` : `내려받는 중 ${fmtBytes(got)}`; });
-$('#btn-update').onclick = async () => {
+async function downloadUpdateFlow() {
   const b = $('#btn-update');
   if (!UPD?.asset) { api.openReleasePage(UPD?.url); return; }
-  b.disabled = true; const r = await api.downloadUpdate(); b.disabled = false; b.textContent = `업데이트 v${UPD.version}`;
+  b.hidden = false; b.disabled = true; const r = await api.downloadUpdate(); b.disabled = false; b.textContent = `업데이트 v${UPD.version}`;
   if (r?.error) { askConfirm(`내려받기 실패: ${r.error}`, { title: '업데이트', ok: '확인', notice: true }); return; }
   askConfirm(`${r.file}\n\n열린 설치 이미지의 앱을 /Applications에 끌어 넣어 덮어쓴 뒤 이 앱을 다시 실행하면 v${UPD.version}입니다. 열어 둔 탭과 세션은 그대로입니다.`, { title: `v${UPD.version} 내려받음`, ok: '확인', danger: false, notice: true });
-};
-$('#btn-check-update').onclick = async (e) => {
-  e.stopPropagation(); const b = $('#btn-check-update'); b.textContent = '확인 중…';
-  const r = await api.checkUpdate(true); b.textContent = '업데이트 확인';
-  if (r?.error) { askConfirm(`확인 실패: ${r.error}`, { title: '업데이트', ok: '확인', notice: true }); return; }
+}
+$('#btn-update').onclick = downloadUpdateFlow;
+// the version labels (톱니 메뉴 footer, 세션 flyout bar) are the check buttons: a click asks GitHub now and writes the verdict
+// beside the version — 최신, 릴리스 없음, or "vX 있음" with a 내려받기 button (the header button appears too)
+function renderCheckResult(statusEl, r) {
+  if (!r || r.error) { statusEl.replaceChildren(`· 확인 실패${r?.error ? ` (${r.error})` : ''}`); return; }
   showUpdate(r);
-  if (!r.newer) askConfirm(r.none ? `아직 게시된 릴리스가 없습니다. 지금 버전은 v${api.appVersion}입니다.` : `지금 버전 v${api.appVersion}이 최신입니다 (최신 릴리스 ${r.tag}).`, { title: '업데이트', ok: '확인', danger: false, notice: true });
-};
+  if (!r.newer) { statusEl.replaceChildren(r.none ? '· 게시된 릴리스 없음' : `· 최신 (릴리스 ${r.tag})`); return; }
+  statusEl.replaceChildren(`· v${r.version} 있음 `, el('button', { class: 'chk', text: '내려받기', 'data-tip': r.asset ? `${r.asset.name}을(를) ~/Downloads에 받아 엽니다` : '릴리스 페이지를 엽니다', onclick: downloadUpdateFlow }));
+}
+async function checkUpdateInline(statusEl) { statusEl.replaceChildren('· 확인 중…'); renderCheckResult(statusEl, await api.checkUpdate(true)); }
+$('#ver-row').onclick = () => checkUpdateInline($('#ver-status'));
 gearMenu.querySelector('.gear-pop').addEventListener('click', (e) => { if (e.target.closest('button')) { gearMenu.classList.remove('open'); gearMenu.classList.add('closed'); } });
 gearMenu.onmouseleave = () => gearMenu.classList.remove('closed', 'open');
 $('#btn-gear').onclick = () => { gearMenu.classList.remove('closed'); gearMenu.classList.toggle('open'); };

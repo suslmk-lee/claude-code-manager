@@ -55,8 +55,11 @@ header button.sq { width:calc(1.3em + 12px); height:calc(1.3em + 12px); padding:
 .gear-pop button kbd { margin-left:auto; font:11px ui-monospace, Menlo, monospace; color:var(--dim); } .gear-pop button:hover kbd { color:var(--on-acc); }
 .gear-pop .sep { height:1px; background:var(--line); margin:4px 2px; }
 .gear-pop .ver { padding:3px 10px 2px; font-size:11px; color:var(--dim); user-select:none; cursor:default; }
-.gear-pop .ver { display:flex; align-items:center; gap:8px; } .gear-pop .ver .chk { width:auto; margin-left:auto; padding:2px 8px; font-size:11px; font-weight:500; border:1px solid var(--line); background:transparent; color:var(--dim); box-shadow:none; }
-.gear-pop .ver .chk:hover { color:var(--fg); border-color:var(--acc); background:transparent; }
+.gear-pop .ver { display:block; line-height:1.7; cursor:pointer; border-radius:6px; } .gear-pop .ver:hover { color:var(--fg); background:var(--hover); } .ver-name { white-space:nowrap; }
+.gear-pop .ver .chk, #version-bar .chk { width:auto; padding:1px 8px; font-size:11px; font-weight:500; border:1px solid var(--line); background:transparent; color:var(--acc); box-shadow:none; }
+.gear-pop .ver .chk:hover, #version-bar .chk:hover { border-color:var(--acc); background:transparent; }
+.ver-link { cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; } .ver-link:hover { color:var(--fg); }
+#ver-status, #ver-status-bar { margin-left:4px; } #ver-status:empty, #ver-status-bar:empty { display:none; }
 #btn-update { padding:5px 11px; font-size:12px; white-space:nowrap; } /* a newer GitHub Release: one click downloads and opens its installer */
 @media (max-width:1500px) { .profile .profile-text, .profile .chev { display:none; } .profile { padding:3px; } } /* narrow window: avatar only (the popover has the name) */
 .tab-arrow { flex:0 0 auto; padding:2px 6px; background:transparent; border-color:transparent; box-shadow:none; color:var(--dim); font-size:16px; line-height:1; }
