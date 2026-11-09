@@ -16,7 +16,7 @@ body { display:flex; flex-direction:column; }
 header { display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid var(--line); background:var(--panel); min-height:44px; position:relative; z-index:30; } /* above the rows below it: a surface that gives the header a backdrop-filter makes it a stacking context, and its flyouts would otherwise paint under the sub-tab row */
 /* macOS: the header is the title bar (hiddenInset): room for the traffic lights, draggable except for its controls */
 html.mac header { padding-left:86px; -webkit-app-region:drag; }
-html.mac header :is(button, input, select, .menu, #tabs, .tab-arrow) { -webkit-app-region:no-drag; }
+html.mac header :is(button, input, select, .menu, .tab, .tab-arrow) { -webkit-app-region:no-drag; } /* the tab strip itself stays draggable: the empty run after the last tab moves the window */
 
 /* session menu: hover (or click) the button to unfold the fleet list over the page */
 .menu { position:relative; }
