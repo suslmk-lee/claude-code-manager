@@ -231,6 +231,7 @@ html.translucent .tabs, html.translucent .head-wrap, html.translucent .pane:not(
 .look-main h4 { margin:0 0 10px; font-size:13px; }
 .look-main .theme-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:4px; padding:0; overflow:visible; }
 .look-main .look-row { padding:6px 0; } .look-main .look-custom { margin:4px 0; width:100%; }
+.look-check { display:flex; align-items:center; justify-content:flex-start; gap:8px; margin:12px 0 4px; font-size:13px; color:var(--fg); cursor:pointer; } .look-check input { width:auto; flex:none; accent-color:var(--acc); margin:0; }
 .swatch b { display:flex; gap:3px; }
 .xterm { height:100%; }
 

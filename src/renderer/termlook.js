@@ -40,7 +40,7 @@ const DEFAULT_FONT_STACK = '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "C
 // monospace families worth offering when installed (checked below); anything else goes in the free-text field
 const FONT_CANDIDATES = ['D2Coding', 'D2CodingLigature', 'NanumGothicCoding', 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'Fira Code', 'FiraCode Nerd Font', 'Cascadia Code', 'Cascadia Mono', 'SF Mono', 'Menlo', 'Monaco', 'Source Code Pro', 'IBM Plex Mono', 'Hack', 'Hack Nerd Font', 'MesloLGS NF', 'Inconsolata', 'Ubuntu Mono', 'Roboto Mono', 'Victor Mono', 'Iosevka', 'Consolas', 'Courier New', 'Pretendard Mono', 'Sarasa Mono K'];
 
-const LOOK = (() => { try { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1, ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1 }; } })();
+const LOOK = (() => { try { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1, termClicks: 'off', ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1, termClicks: 'off' }; } })();
 // card style (surface): how cards, tiles, tabs and stat blocks are drawn — style.css keys every rule off html[data-surface]
 const SURFACES = [
   { id: 'glass', name: '리퀴드 글라스', hint: '반투명 유리 · 굴절 림 · 광택 · 색 번짐' },
@@ -170,7 +170,9 @@ function openLook() {
       el('div', { class: 'look-row' }, el('span', { class: 'look-label', text: '글꼴' }), sel, size, el('span', { class: 'look-unit', text: 'px' })),
       custom,
       isMac ? el('div', { class: 'look-row', 'data-tip': '터미널 배경만 투명해지고 글자는 그대로입니다 · 뒤 창이 비쳐 보임' }, el('span', { class: 'look-label', text: '투명도' }), alpha, pct) : null,
-      el('p', { class: 'hint', text: '글꼴과 크기는 모든 터미널(Claude · 셸)에 바로 적용됩니다.' }))],
+      el('p', { class: 'hint', text: '글꼴과 크기는 모든 터미널(Claude · 셸)에 바로 적용됩니다.' }),
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', id: 'look-clicks', checked: LOOK.termClicks === 'on' ? '' : null, onchange: (e) => { LOOK.termClicks = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 마우스 클릭을 Claude 터미널에 전달'),
+      el('p', { class: 'hint', text: '꺼 두면(기본) 클릭이 Claude 화면의 메뉴를 열지 않습니다. 예전엔 상태줄을 클릭하면 백그라운드 에이전트 목록이 열려 거기서 입력한 프롬프트가 새 세션 "(2)"로 가곤 했습니다. 휠 스크롤은 그대로 전달됩니다.' }))],
     ['termTheme', '터미널 테마', () => el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row glass' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
       swatch(t), el('span', { class: 'theme-name', text: t.name }))))],
   ];

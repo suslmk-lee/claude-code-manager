@@ -1,5 +1,5 @@
 'use strict';
-/* global Terminal, FitAddon */
+/* global Terminal, FitAddon, dropClicks */
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -401,6 +401,7 @@ function createTerm(s) {
       else if (b.viewportY < b.baseY) term.scrollToBottom(); // classic renderer: xterm's own scrollback
       t.wheeledUp = false;
     }
+    if (!(typeof LOOK !== 'undefined' && LOOK.termClicks === 'on')) { d = dropClicks(d); if (!d) return; } // clicks stay local unless 모양 says otherwise; wheel reports pass
     api.ptyWrite(t.ptyId, d);
   });
   term.onResize(({ cols, rows }) => t.ptyId && api.ptyResize(t.ptyId, cols, rows));
