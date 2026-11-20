@@ -183,6 +183,7 @@ body.resizing { cursor:ns-resize; user-select:none; }
 .starting .spin { width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--acc); border-radius:50%; animation:ccm-spin .8s linear infinite; }
 @keyframes ccm-spin { to { transform:rotate(360deg); } }
 .term-box { flex:1; min-height:0; }
+.term-box.local-clicks .xterm.enable-mouse-events { cursor:text; } /* clicks stay local: the pointer says the text is selectable */
 .term-bar { display:flex; gap:8px; align-items:center; padding:4px 6px; color:var(--dim); font-size:11px; }
 /* terminal look picker (theme gallery + font) */
 .look-head { display:flex; align-items:center; justify-content:space-between; padding:0 12px 8px; }

@@ -357,7 +357,11 @@ function attachArgs(s) {
   return ['--resume', s.sessionId];
 }
 // xterm setup shared by the Claude terminal and the plain shell: font/theme, fit addon, key handling, auto-fit on resize
-function newXterm() {
+// clicks on a Claude terminal stay local unless 모양 → 「마우스 클릭을 Claude 터미널에 전달」 is on
+const clicksLocal = () => !(typeof LOOK !== 'undefined' && LOOK.termClicks === 'on');
+// localClicks: a function saying whether this terminal keeps mouse clicks to itself (the Claude terminal) — then drag-selection
+// stays on even while the program tracks the mouse. Omitted (the shell panel) = xterm's default: the program owns the drag.
+function newXterm({ localClicks } = {}) {
   const term = new Terminal({ cursorBlink: true, scrollback: 5000, ...xtermOptions() }); // theme + font from termlook.js (user-chosen, persisted)
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
@@ -374,13 +378,25 @@ function newXterm() {
     return true;
   });
   new ResizeObserver(() => box.isConnected && box.clientHeight && fit.fit()).observe(box);
-  return { term, fit, box };
+  // xterm switches its own drag-selection off whenever the program enables mouse reporting (the fullscreen TUI does) and
+  // expects the program to handle the drag. When clicks never reach the program there is nothing to hand the drag to, so
+  // selection is switched back on after every protocol change (xterm disables it there first). xterm 5.5 internals, guarded.
+  const sel = term._core?._selectionService, mouse = term._core?.coreMouseService;
+  const syncSelection = () => { if (!localClicks || !sel || !mouse) return; if (mouse.areMouseEventsActive && !localClicks()) sel.disable(); else sel.enable(); };
+  if (localClicks && sel && mouse?.onProtocolChange && mouse.triggerMouseEvent) {
+    mouse.onProtocolChange(syncSelection); box.classList.add('local-clicks');
+    // and the reports themselves are stopped at the source: a report counts as user input, on which xterm clears the
+    // selection (the mouse-up report would wipe the drag just made). Wheel reports (button 4) still go to the program.
+    const send = mouse.triggerMouseEvent.bind(mouse);
+    mouse.triggerMouseEvent = (e) => (e.button !== 4 && localClicks() ? false : send(e));
+  }
+  return { term, fit, box, syncSelection };
 }
 function createTerm(s) {
-  const { term, fit, box } = newXterm();
+  const { term, fit, box, syncSelection } = newXterm({ localClicks: clicksLocal });
   const status = el('span', { text: '연결 안 됨' });
   const btn = el('button', { onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
-  const t = { term, fit, box, btn, status, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status) }; // 모양 lives in the gear menu
+  const t = { term, fit, box, btn, status, syncSelection, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status) }; // 모양 lives in the gear menu
   // one button toggles: detach only ends the `claude attach` client, the background session keeps running
   t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; btn.textContent = t.ptyId ? (live ? '떼기 (detach)' : '닫기') : (live ? '붙기 (attach)' : '이어가기 (resume)'); }; // fresh state: s is the object from when the tab was built
   t.setLabel();
@@ -401,7 +417,7 @@ function createTerm(s) {
       else if (b.viewportY < b.baseY) term.scrollToBottom(); // classic renderer: xterm's own scrollback
       t.wheeledUp = false;
     }
-    if (!(typeof LOOK !== 'undefined' && LOOK.termClicks === 'on')) { d = dropClicks(d); if (!d) return; } // clicks stay local unless 모양 says otherwise; wheel reports pass
+    if (clicksLocal()) { d = dropClicks(d); if (!d) return; } // wheel reports pass
     api.ptyWrite(t.ptyId, d);
   });
   term.onResize(({ cols, rows }) => t.ptyId && api.ptyResize(t.ptyId, cols, rows));

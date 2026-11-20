@@ -124,6 +124,7 @@ function applyLook() {
   for (const t of [...(S.terms?.values() || []), ...(S.shells?.values() || [])]) {
     t.term.options.theme = o.theme; t.term.options.fontFamily = o.fontFamily; t.term.options.fontSize = o.fontSize;
     if (t.box.isConnected) t.fit.fit();
+    t.syncSelection?.(); // the click-forwarding toggle decides who owns a drag
   }
   saveLook();
   $('#term-look')?.querySelectorAll('.theme-row[data-id]').forEach((r) => r.classList.toggle('sel', r.dataset.id === LOOK.theme));
