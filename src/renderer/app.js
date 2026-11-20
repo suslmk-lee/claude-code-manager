@@ -1,5 +1,5 @@
 'use strict';
-/* global Terminal, FitAddon, dropClicks */
+/* global Terminal, FitAddon, dropClicks, isTermReport */
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -410,7 +410,9 @@ function createTerm(s) {
   const tuiScrolledUp = () => { const b = term.buffer.active; for (let i = b.viewportY, end = Math.min(b.length, b.viewportY + term.rows); i < end; i++) if (SCROLLED_UP_HINT.test(b.getLine(i)?.translateToString(true) || '')) return true; return false; };
   term.onData((d) => {
     if (!t.ptyId) return;
-    if (/^\x1b\[[<MIO]/.test(d)) { if (/^\x1b\[<64;/.test(d)) t.wheeledUp = true; } // SGR button 64 = wheel up
+    // replies to the TUI's own queries ride this path too (Claude Code 2.1.328+ polls the cursor position several times a
+    // second): they are not typing, so neither the catch-up below nor the wheeled-up reset may fire on them
+    if (isTermReport(d)) { if (/^\x1b\[<64;/.test(d)) t.wheeledUp = true; } // SGR button 64 = wheel up
     else {
       const b = term.buffer.active;
       if (b.type === 'alternate') { if (t.wheeledUp || tuiScrolledUp()) api.ptyWrite(t.ptyId, '\x1b[1;5F'); }
