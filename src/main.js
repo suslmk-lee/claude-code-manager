@@ -5,12 +5,16 @@ const fs = require('fs');
 const pty = require('node-pty');
 const data = require('./data');
 const chat = require('./chat');
+const appusage = require('./appusage'); // 사내 앱 사용 기록 (QuantumMate)
 
 data.setCacheDir(path.join(app.getPath('userData'), 'cache'));
 
 const isMac = process.platform === 'darwin', isWin = process.platform === 'win32';
 const TITLE = 'Claude Code Manager';
 if (isWin) app.setAppUserModelId('local.claude-code-manager'); // = build.appId; HTML5 Notification needs it on Windows
+// 한 번에 한 인스턴스만 :: 두 번째는 바로 끝내고 첫 창을 앞으로 (사용 분 중복 · 로그인 때 남은 옛 인스턴스 겹침 방지). 개발 실행은 설치 앱 옆에 띄울 수 있다
+if (app.isPackaged && !app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 
 let win;
 const ptys = new Map(); // ptyId → node-pty process
@@ -290,6 +294,7 @@ function buildMenu() {
 
 app.whenReady().then(() => {
   scheduleUpdateChecks();
+  if (app.isPackaged) appusage.start(app.getVersion()); // dev runs and harness scripts are not team usage
   if (!app.isPackaged) app.dock?.setIcon(path.join(__dirname, '..', 'build', 'icon.png')); // dev runs show our icon too
   buildMenu();
   createWindow();
@@ -312,3 +317,11 @@ app.on('web-contents-created', (_e, contents) => {
   contents.on('will-attach-webview', (e, prefs) => { prefs.nodeIntegration = false; prefs.contextIsolation = true; });
 });
 app.on('window-all-closed', () => app.quit());
+// 끌 때 남은 사용 분을 보낸다 (2초 이내); 보낼 것이 없으면 바로 끝난다
+let usageFlushed = false;
+app.on('before-quit', (e) => {
+  if (usageFlushed) return;
+  usageFlushed = true;
+  const p = appusage.flush();
+  if (p) { e.preventDefault(); p.finally(() => app.quit()); }
+});

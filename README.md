@@ -108,6 +108,10 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   place), in-conversation filter, subagent chatter skipped. The session flyout's search box filters rows as
   you type; Enter runs a full-text search over every transcript (grep narrows files, then parsed turns give
   role-aware snippets) and a hit opens that session at that turn.
+- **사내 앱 사용 기록** — the packaged app posts `{ app: "claude-code-manager", version, minutes }` to the QuantumMate
+  server (`{endpoint}/apps/usage`, bearer token from `~/Library/Application Support/ai.quantumcns.quantummate/collect.json`,
+  written by the QuantumMate team app): 0 on start, 5 per five 1-minute ticks, the rest on quit. No file → nothing is
+  sent; failures are dropped silently. Spec: quantum-mate `docs/app-usage-client.md`.
 - **Respawn after a Claude Code update** — the flyout's top bar shows the installed CLI version and how many
   running background sessions were started on an older build (from `~/.claude/sessions/*.json`); "모두 재시작"
   runs `claude respawn --all` after a confirm. A session's header shows its version badge (yellow when stale).
