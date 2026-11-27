@@ -177,11 +177,41 @@ function openLook() {
     ['notify', '알림', () => el('div', {},
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.doneNotify === 'off' ? null : '', onchange: (e) => { LOOK.doneNotify = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 작업이 끝나면 알림'),
       el('p', { class: 'hint', text: '10초 넘게 작업하던 세션이 멈추면 소리와 함께 알립니다. 지금 보고 있는 세션은 알리지 않습니다. 입력 대기 알림은 항상 켜져 있습니다.' }))],
+    ['ccmy', 'CCMy', () => el('div', {},
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmy === 'off' ? null : '', onchange: (e) => { LOOK.ccmy = e.target.checked ? 'on' : 'off'; applyLook(); ccmyApplyLook(); } }), ' CCMy 버블 표시'),
+      el('p', { class: 'hint', text: '화면 구석에 떠 있는 에이전트입니다. 세션 상태를 묻거나 세션에 시킬 일을 말하면 대신 확인하고 전달합니다. 끌어서 옮길 수 있습니다.' }),
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmyBrief === 'off' ? null : '', onchange: (e) => { LOOK.ccmyBrief = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 알림이 오면 세션을 읽고 요약'),
+      el('p', { class: 'hint', text: '입력 대기 · 작업 완료가 생기면 CCMy가 그 세션의 최근 대화를 읽고 무슨 일인지 알려 줍니다. 알림마다 토큰을 조금 씁니다. 꺼도 대화는 할 수 있습니다.' }),
+      el('label', { class: 'look-field' }, '모델', el('select', { onchange: (e) => { LOOK.ccmyModel = e.target.value; applyLook(); ccmyApplyLook(true); } }, // a <select>, not a datalist: select.js themes its list
+        ...[...new Set(['haiku', 'sonnet', 'opus', 'fable', ccmyModel()])].map((m) => el('option', { value: m, text: m === 'haiku' ? 'haiku (기본)' : m, selected: m === ccmyModel() ? '' : null })))),
+      el('p', { class: 'hint', text: '기본은 haiku 입니다. sonnet · opus · fable 은 판단이 낫지만 알림 요약마다 드는 토큰이 늘어납니다. 바꾸면 CCMy와의 대화가 새로 시작됩니다.' }),
+      el('div', { class: 'look-label', text: '캐릭터' }),
+      el('div', { class: 'ccmy-pick' }, ...Object.entries(CCMY_CHARS).map(([id, [name]]) => { const b = el('button', { type: 'button', class: id === ccmyChar() ? 'sel' : '', 'data-id': id, onclick: () => { LOOK.ccmyChar = id; applyLook(); ccmyApplyLook(); for (const x of b.parentNode.children) x.classList.toggle('sel', x === b); } }, el('span', { text: name })); b.insertAdjacentHTML('afterbegin', ccmyCharSvg(id)); return b; })))],
+    ['ccmyAuto', '이어서 진행', () => { const num = (key, def, lo, hi, step) => el('input', { type: 'number', min: String(lo), max: String(hi), step: String(step), value: String(LOOK[key] || def), onchange: (e) => { const n = Number(e.target.value); LOOK[key] = Number.isFinite(n) && n >= lo ? Math.min(n, hi) : def; e.target.value = String(LOOK[key]); applyLook(); } });
+      return el('div', {},
+        el('p', { class: 'hint', text: '세션 탭을 우클릭해 「CCMy 이어서 진행…」을 켜면, 그 세션이 멈출 때마다 CCMy가 대화를 읽고 목표 안에서 답을 보내 작업을 이어 가게 합니다. 여기서는 그 기본값을 정합니다. 횟수와 시간은 켤 때마다 세션별로 바꿀 수 있습니다.' }),
+        el('label', { class: 'look-field' }, '결정 모델', el('select', { onchange: (e) => { LOOK.ccmyAutoModel = e.target.value; applyLook(); api.ccmyClose('auto'); } },
+          ...[...new Set(['haiku', 'sonnet', 'opus', 'fable', ccmyAutoModel()])].map((m) => el('option', { value: m, text: m === 'sonnet' ? 'sonnet (기본)' : m, selected: m === ccmyAutoModel() ? '' : null })))),
+        el('p', { class: 'hint', text: '보낼지 · 사용자에게 넘길지를 판단하는 모델입니다. 대화용 모델(모양 › CCMy)과 따로 둡니다. 판단이 틀리면 세션이 엉뚱한 방향으로 가므로 sonnet 이상을 권합니다.' }),
+        el('label', { class: 'look-field' }, '자동 전송 횟수', num('ccmyAutoMax', 5, 1, 30, 1), '회'),
+        el('p', { class: 'hint', text: '한 세션에 CCMy가 스스로 보낼 수 있는 답의 수입니다 (1 ~ 30). 다 쓰면 이어서 진행이 꺼지고 알림으로 돌아갑니다.' }),
+        el('label', { class: 'look-field' }, '시간', num('ccmyAutoHours', 2, 0.25, 24, 0.25), '시간'),
+        el('p', { class: 'hint', text: '켠 뒤 이 시간이 지나면 꺼집니다 (0.25 ~ 24).' }),
+        el('p', { class: 'hint', text: '바꿀 수 없는 것 :: 머지 · 푸시 · 배포 · 릴리스 · 삭제 · 결제 · 외부 전송에 관한 질문과 권한 승인 메뉴에는 답하지 않고 항상 알림으로 넘깁니다. 앱을 다시 켜면 이어서 진행은 모두 꺼집니다.' })); }],
     ['termTheme', '터미널 테마', () => el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row glass' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
       swatch(t), el('span', { class: 'theme-name', text: t.name }))))],
   ];
+  const NAV_ICON = { // 24×24 stroke icons for the side menu, by page id
+    app: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.7 1.8-1.5 0-.9-.8-1.3-.8-2.2 0-.9.8-1.6 1.8-1.6h1.6a4 4 0 0 0 4.1-4C20.5 7 16.7 3.5 12 3.5z"/><path d="M8 11h.01M11.5 7.5h.01M15.5 9h.01"/>',
+    surface: '<rect x="4" y="8.5" width="12" height="11" rx="2.5"/><path d="M8 8.500V7a2.5 2.5 0 0 1 2.5-2.500h7A2.5 2.5 0 0 1 20 7v6a2.5 2.5 0 0 1-2.5 2.500H16"/>',
+    term: '<path d="M4.5 18L9 6l4.5 12M6 14h6M15.5 18v-5.500M15.5 14.500a2.5 2.5 0 0 1 5 0V18"/>',
+    notify: '<path d="M6.5 16.5v-5a5.5 5.5 0 0 1 11 0v5l1.5 2h-14z"/><path d="M10 20.5h4"/>',
+    ccmyAuto: '<path d="M5 12a7 7 0 0 1 12-4.9L19 9M19 4.500V9h-4.500M19 12a7 7 0 0 1-12 4.900L5 15M5 19.500V15h4.5"/>',
+    ccmy: '<rect x="5" y="8" width="14" height="11" rx="4"/><path d="M12 8V4.500M9.5 13.500h.01M14.5 13.500h.01"/>',
+    termTheme: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M7.5 10l3 2.5-3 2.500M13 15h3.5"/>',
+  };
   const main = el('div', { class: 'look-main' });
-  const side = el('div', { class: 'look-side' }, ...PAGES.map(([id, name]) => el('button', { class: 'look-nav glass', 'data-page': id, text: name, onclick: () => show(id) })));
+  const side = el('div', { class: 'look-side' }, ...PAGES.map(([id, name]) => { const b = el('button', { class: 'look-nav', 'data-page': id, onclick: () => show(id) }, el('span', { text: name })); b.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 24 24">${NAV_ICON[id] || NAV_ICON.ccmy}</svg>`); return b; }));
   const show = (id) => { lookPage = id; const [, name, build] = PAGES.find((p) => p[0] === id) || PAGES[0]; side.querySelectorAll('.look-nav').forEach((b) => b.classList.toggle('active', b.dataset.page === id)); main.replaceChildren(el('h4', { text: name }), build()); main.scrollTop = 0; };
   const dlg = el('dialog', { id: 'term-look', class: 'look-dlg glass', onclose: () => dlg.remove(), onclick: (e) => { if (e.target === dlg) dlg.close(); } }, // a click on the backdrop closes
     el('div', { class: 'look-head' }, el('b', { text: '모양' }), el('button', { class: 'x', text: '×', onclick: () => dlg.close() })),

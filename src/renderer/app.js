@@ -120,11 +120,20 @@ function followContinuation(oldId, newId) {
   saveTabs();
 }
 // ---------- needs-input: notify on the transition, badge until the tab is opened ----------
-const needsInput = (s) => !!(s.job?.needs || s.state === 'blocked');
+// 입력 대기 해제: a question that no longer needs an answer. Remembered in this app only (localStorage), keyed by the question:
+// the session and its files stay as they are, and a new question from the same session shows up again.
+const needsOff = (() => { try { return JSON.parse(localStorage.getItem('needsOff')) || {}; } catch { return {}; } })();
+const needsKey = (s) => s.job?.needs || s.job?.detail || s.state || '';
+const needsInput = (s) => !!(s.job?.needs || s.state === 'blocked') && needsOff[s.sessionId] !== needsKey(s);
+function setNeedsOff(ids, off = true) {
+  for (const id of ids) { const s = S.sessions.find((x) => x.sessionId === id); if (off && s) needsOff[id] = needsKey(s); else delete needsOff[id]; }
+  try { localStorage.setItem('needsOff', JSON.stringify(needsOff)); } catch { /* this run only */ }
+  trackNeedsInput(); renderSessionList(); renderTabs();
+}
 // what the dot, the list group and the card counts show for a live session: its current activity (daemon status busy/idle),
 // not the job's own long-term state — a job says "working" while follow-ups are pending even as its process sits idle at the prompt.
 // A stopped session keeps the job's last state (done / working) so a hollow ring still tells how it was left.
-const activity = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : s.live ? (s.status === 'busy' ? 'working' : 'idle') : (s.state || s.status || '');
+const activity = (s) => needsInput(s) ? 'blocked' : s.live ? (s.status === 'busy' ? 'working' : 'idle') : (s.state === 'blocked' ? 'idle' : s.state || s.status || ''); // a released wait reads as idle
 let prevNeeds = null; // null until the first load, so sessions already waiting at startup do not fire
 // 작업 완료 알림 (모양 › 알림): a session that worked for a while and is now idle/done. Short turns (< 10 s) and the session
 // on screen in the focused window stay quiet; needs-input has its own notification above.
@@ -136,9 +145,13 @@ function trackDone() {
     if (a === 'working') { if (!workingSince.has(id)) workingSince.set(id, Date.now()); continue; }
     const since = workingSince.get(id);
     workingSince.delete(id);
-    if (!since || !doneBooted || a === 'blocked' || Date.now() - since < 10000) continue;
-    if (typeof LOOK !== 'undefined' && LOOK.doneNotify === 'off') continue;
+    if (!since || !doneBooted || a === 'blocked') continue;
+    // CCMy 이어서 진행: every stop counts, short turns and the session on screen included; it answers instead of notifying
+    if (typeof ccmyAutoOn === 'function' && ccmyAutoOn(id)) { if (ccmyAutoStep(s, '작업을 멈춤')) continue; }
+    if (Date.now() - since < 10000) continue;
     if (document.hasFocus() && S.view === 'sessions' && (id === S.sel || (groupShown() && S.group.includes(id)))) continue;
+    if (typeof ccmyDone === 'function') ccmyDone(s); // the CCMy card stays even with the OS notification switched off
+    if (typeof LOOK !== 'undefined' && LOOK.doneNotify === 'off') continue;
     try {
       const n = new Notification(`작업 완료: ${s.name}`, { body: s.job?.detail || '세션이 작업을 마쳤습니다', silent: false });
       n.onclick = () => { api.focusWindow(); openSession(id); };
@@ -155,10 +168,12 @@ function trackNeedsInput() {
   api.setBadge(now.size);
   const btn = $('#btn-sessions');
   btn.replaceChildren('세션 ▾', now.size ? el('span', { class: 'pill', text: String(now.size) }) : '');
+  if (typeof ccmyRender === 'function') ccmyRender();
 }
 function notifyNeedsInput(s) {
   S.unseen.add(s.sessionId);
   if (!S.tabs.includes(s.sessionId)) S.tabs.push(s.sessionId);
+  if (typeof ccmyAlert === 'function') ccmyAlert(s, '입력 대기');
   try {
     const n = new Notification(`입력 대기: ${s.name}`, { body: s.job?.needs || s.job?.detail || '세션이 입력을 기다립니다', silent: false });
     n.onclick = () => { api.focusWindow(); openSession(s.sessionId); };
@@ -361,7 +376,7 @@ function renderSessionList() {
     list.append(el('div', { class: 'group-title', text: `${title} (${arr.length})` }));
     for (const s of arr) { const r = sessionRow(s); r.style.setProperty('--i', list.childElementCount); list.append(r); } // stagger index
   };
-  const bucket = (s) => s.pinned ? 'pinned' : (s.job?.needs || s.state === 'blocked') ? 'needs'
+  const bucket = (s) => s.pinned ? 'pinned' : needsInput(s) ? 'needs'
     : activity(s) === 'working' ? 'working' : s.job ? 'done' : 'other';
   const by = {};
   const q = (S.sessFilter || '').toLowerCase();
@@ -978,6 +993,8 @@ function showCtx(e, s) {
       : [s.sessionId !== S.sel && cur() ? item('오른쪽에 나란히 보기', () => addSplit(s.sessionId)) : null]),
     el('div', { class: 'sep' }),
     s.local ? null : item('이름 변경…', () => renameFlow(s)),
+    bg && s.live && typeof ccmyAutoOn === 'function' ? (ccmyAutoOn(s.sessionId) ? item('CCMy 이어서 진행 끄기', () => ccmyAutoOff(s.sessionId, '사용자가 껐습니다')) : item('CCMy 이어서 진행…', () => ccmyAutoStart(s))) : null,
+    needsInput(s) ? item('입력 대기 해제 (답할 필요 없음)', () => setNeedsOff([s.sessionId])) : s.sessionId in needsOff ? item('입력 대기 다시 표시', () => setNeedsOff([s.sessionId], false)) : null,
     s.job ? item(s.pinned ? '핀 해제' : '핀 고정 (맨 위로)', () => api.setPinned(s.short, !s.pinned, s.profile).then(loadSessions)) : null,
     bg && s.live ? item('중지', () => act('stop', s)) : null,
     bg ? item('재시작 (respawn)', () => act('respawn', s)) : null,
@@ -1159,6 +1176,13 @@ async function downloadUpdateFlow() {
   if (!UPD?.asset) { api.openReleasePage(UPD?.url); return; }
   b.hidden = false; b.disabled = true; const r = await api.downloadUpdate(); b.disabled = false; b.textContent = `업데이트 v${UPD.version}`;
   if (r?.error) { askConfirm(`내려받기 실패: ${r.error}`, { title: '업데이트', ok: '확인', notice: true }); return; }
+  if (r.auto) { // macOS: the app closes itself, swaps the bundle and reopens
+    if (!await askConfirm(`앱을 닫고 v${UPD.version}을 설치한 뒤 다시 엽니다. 10초쯤 걸립니다.\n\n열어 둔 탭은 그대로 돌아오고, 백그라운드 세션은 계속 실행됩니다. 셸 패널과 챗 세션은 닫힙니다.`, { title: `v${UPD.version} 설치`, ok: '설치하고 다시 시작', danger: false })) return;
+    b.disabled = true; b.textContent = '설치하는 중…';
+    const i = await api.installUpdate(r.file);
+    if (i?.error) { b.disabled = false; b.textContent = `업데이트 v${UPD.version}`; askConfirm(`설치 실패: ${i.error}\n\n${r.file} 을 직접 열어 설치해 주세요.`, { title: '업데이트', ok: '확인', notice: true }); }
+    return;
+  }
   askConfirm(`${r.file}\n\n열린 설치 이미지의 앱을 /Applications에 끌어 넣어 덮어쓴 뒤 이 앱을 다시 실행하면 v${UPD.version}입니다. 열어 둔 탭과 세션은 그대로입니다.`, { title: `v${UPD.version} 내려받음`, ok: '확인', danger: false, notice: true });
 }
 $('#btn-update').onclick = downloadUpdateFlow;

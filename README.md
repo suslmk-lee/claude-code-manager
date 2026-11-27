@@ -122,6 +122,14 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
 - **단축키 안내** — 톱니 메뉴 → 단축키 (also 탭 menu) lists every shortcut; the list and the menu come from one table (`SHORTCUTS` in main.js).
 - **작업 완료 알림** — a session that worked 10 s or longer and then stops fires a notification (not for the session on screen);
   모양 → 알림 turns it off. Needs-input notifications are separate and always on.
+- **App update** — the header shows 「업데이트 vX」 when a newer GitHub release exists. macOS: one click downloads the dmg,
+  the app closes itself, swaps its bundle in place and reopens (`src/update.js` `installMac`). Elsewhere the installer is opened.
+- **CCMy** — a floating agent in the corner (`src/ccmy.js`, Agent SDK, haiku, not saved as a session). 대화: ask about
+  sessions or tell it what a session should do; its only tools are list sessions, read a session's recent turns, open a
+  session, and type into a running background session — the last one only after a 보내기 click on the confirm card. A
+  needs-input / finished alert is handed to it, so it reads the session and briefs (one-line peek beside the bubble; the
+  panel opens on a click only). 이어서 진행 (tab menu, with a goal): CCMy answers a stopped session by itself — at most
+  5 sends / 2 h, never merge · push · deploy · delete · payment · outward messages, never a permission menu. 세션: the plain card list. Drag to move; 모양 › 알림 hides it or turns the briefing off.
 - **사내 앱 사용 기록** — the packaged app posts `{ app: "claude-code-manager", version, minutes }` to the QuantumMate
   server (`{endpoint}/apps/usage`, bearer token from `~/Library/Application Support/ai.quantumcns.quantummate/collect.json`,
   written by the QuantumMate team app): 0 on start, 5 per five 1-minute ticks, the rest on quit. No file → nothing is

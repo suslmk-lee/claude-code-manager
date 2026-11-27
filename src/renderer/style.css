@@ -234,9 +234,14 @@ html.translucent .tabs, html.translucent .head-wrap, html.translucent .pane:not(
 .look-dlg { width:min(820px, 94vw); max-width:none; padding:0; border-radius:12px; }
 .look-dlg .look-head { padding:12px 16px; border-bottom:1px solid var(--line); }
 .look-body { display:flex; height:min(72vh, 680px); }
-.look-side { flex:0 0 176px; display:flex; flex-direction:column; gap:2px; padding:10px 8px; border-right:1px solid var(--line); background:color-mix(in srgb, var(--fg) 3%, transparent); }
-.look-nav { justify-content:flex-start; padding:9px 12px; color:var(--dim); font-weight:500; text-align:left; white-space:normal; } /* a card like the rows (class glass); the surface dresses it */
-.look-nav:hover { color:var(--fg); }
+.look-side { flex:0 0 200px; display:flex; flex-direction:column; gap:8px; padding:16px 12px; border-right:1px solid var(--line); background:color-mix(in srgb, var(--fg) 3%, transparent); }
+/* side menu: flat rows with an icon; the current page gets an accent wash and a bar (kept out of the card surfaces on purpose) */
+html .look-side .look-nav { all:unset; position:relative; display:flex; align-items:center; gap:11px; padding:11px 14px; border-radius:12px; color:var(--dim); font-size:13px; font-weight:500; cursor:pointer; transition:background .15s, color .15s; transform:none; box-shadow:none; }
+.look-nav svg { flex:none; width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; opacity:.85; }
+html .look-side .look-nav:hover { background:color-mix(in srgb, var(--fg) 6%, transparent); color:var(--fg); }
+html .look-side .look-nav.active { background:color-mix(in srgb, var(--acc) 14%, transparent); color:var(--fg); font-weight:600; } .look-nav.active svg { stroke:var(--acc); opacity:1; }
+.look-nav.active::before { content:''; position:absolute; left:0; top:50%; width:3px; height:18px; margin-top:-9px; border-radius:0 3px 3px 0; background:var(--acc); }
+html .look-side .look-nav:focus-visible { outline:2px solid var(--acc); outline-offset:-2px; }
 .look-main { flex:1; min-width:0; overflow:auto; padding:12px 14px 16px; }
 .look-main h4 { margin:0 0 10px; font-size:13px; }
 .look-main .theme-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:4px; padding:0; overflow:visible; }
@@ -760,3 +765,80 @@ html .split-tools button svg, html .term-bar button.ico svg, html .tabs button.i
 html .tabs button.ico { width:28px; height:26px; } html .tabs button.ico svg { width:15px; height:15px; }
 .tabs .split-layout { margin-left:auto; } .tabs .split-layout + .split-layout { margin-left:0; }
 html .tabs button.ico.split-layout { margin-left:auto; } html .tabs button.ico.split-layout + .split-layout { margin-left:0; }
+
+/* CCMy (ccmy.js): floating agent bubble + panel. Above the header (30), below tooltips (50) and menus (60). */
+#ccmy { position:fixed; z-index:40; width:52px; height:52px; --ccmy-ring:conic-gradient(var(--acc), var(--warn), var(--ok), #5b8def, var(--acc)); }
+.ccmy-ico { display:inline-flex; } .ccmy-ico svg { width:100%; height:100%; display:block; }
+html .ccmy-fab { all:unset; position:relative; display:block; width:52px; height:52px; border-radius:50%; cursor:grab; filter:drop-shadow(0 4px 10px rgba(0,0,0,.55)); transition:transform .28s var(--ease-spring); touch-action:none; }
+html .ccmy-fab:hover { transform:scale(1.06); } html .ccmy-fab:active { cursor:grabbing; }
+html .ccmy-fab:focus-visible { outline:2px solid var(--acc); outline-offset:5px; }
+.ccmy-fab .ccmy-ico { position:relative; width:52px; height:52px; pointer-events:none; }
+.ccmy-fab .pill { position:absolute; top:-4px; right:-4px; pointer-events:none; }
+.ccmy-fab::before { content:''; position:absolute; inset:-4px; border-radius:50%; background:var(--ccmy-ring); opacity:0; transition:opacity .25s; pointer-events:none; }
+.ccmy-fab.alert::after { content:''; position:absolute; inset:-4px; border-radius:50%; border:2px solid var(--warn); pointer-events:none; animation:ccmy-pulse 1.8s ease-out infinite; }
+/* open: the bubble shrinks (52 → 44), a rainbow ring turns around it and the character bobs; faster while the agent works */
+#ccmy.open .ccmy-fab { transform:scale(.85); } #ccmy.open .ccmy-fab::before { opacity:1; animation:ccmy-spin 6s linear infinite; }
+#ccmy.open .ccmy-fab.alert::after { display:none; } #ccmy.open .ccmy-fab .ccmy-ico { animation:ccmy-bob 2.6s ease-in-out infinite; }
+#ccmy.busy .ccmy-fab::before { opacity:1; animation:ccmy-spin 1.2s linear infinite; }
+@keyframes ccmy-pulse { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.25); } }
+@keyframes ccmy-spin { to { transform:rotate(360deg); } }
+@keyframes ccmy-bob { 0%, 100% { transform:translateY(0) rotate(0); } 30% { transform:translateY(-2px) rotate(-4deg); } 70% { transform:translateY(1px) rotate(4deg); } }
+@keyframes ccmy-pop { from { opacity:0; transform:scale(.55); } }
+@media (prefers-reduced-motion: reduce) { .ccmy-fab::before, .ccmy-fab::after, .ccmy-fab .ccmy-ico, .ccmy-panel { animation:none !important; } }
+.ccmy-peek { position:absolute; right:62px; bottom:8px; max-width:340px; padding:8px 12px; border-radius:14px 14px 3px 14px; background:var(--raised); border:1px solid var(--line2); box-shadow:0 6px 18px rgba(0,0,0,.45); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; font-size:12.5px; }
+#ccmy.toR .ccmy-peek { right:auto; left:62px; border-radius:14px 14px 14px 3px; }
+.ccmy-panel { position:absolute; right:0; bottom:62px; width:384px; max-width:calc(100vw - 24px); height:min(620px, calc(100vh - 140px)); display:flex; flex-direction:column; overflow:hidden; background:color-mix(in srgb, var(--bg) 88%, #000); border:1px solid var(--line); border-radius:26px; box-shadow:0 24px 60px rgba(0,0,0,.7); transform-origin:100% 100%; animation:ccmy-pop .26s var(--ease-spring); }
+#ccmy.down .ccmy-panel { bottom:auto; top:62px; transform-origin:100% 0; } #ccmy.toR .ccmy-panel { right:auto; left:0; transform-origin:0 100%; } #ccmy.down.toR .ccmy-panel { transform-origin:0 0; }
+.ccmy-head { flex:none; padding:16px 16px 0; border-bottom:1px solid var(--line); background:radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--acc) 26%, transparent), transparent 60%), linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, var(--acc)), var(--panel)); }
+.ccmy-head-row { display:flex; align-items:center; gap:12px; }
+.ccmy-av { flex:none; width:46px; height:46px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(135deg, var(--acc), var(--warn), var(--ok)); } .ccmy-av .ccmy-ico { width:41px; height:41px; }
+.ccmy-ttl { flex:1; min-width:0; } .ccmy-ttl b { display:block; font-size:17px; letter-spacing:.3px; line-height:1.2; }
+.ccmy-model { display:inline-flex; align-items:center; gap:5px; margin-top:3px; padding:0 8px; border-radius:9px; background:color-mix(in srgb, var(--fg) 8%, transparent); color:var(--dim); font-size:11px; line-height:1.7; } .ccmy-model::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--ok); }
+html .ccmy-head .x { all:unset; width:28px; height:28px; border-radius:8px; text-align:center; line-height:28px; font-size:17px; color:var(--dim); cursor:pointer; } html .ccmy-head .x:hover { background:var(--hover); color:var(--fg); }
+.ccmy-seg { display:flex; gap:18px; margin-top:12px; } html .ccmy-seg button { all:unset; display:inline-flex; align-items:center; gap:5px; padding:0 1px 6px; border-bottom:2px solid transparent; font-size:12.5px; color:var(--dim); cursor:pointer; } html .ccmy-seg button.on { color:var(--fg); border-bottom-color:var(--acc); }
+.ccmy-chat { flex:1; min-height:0; display:flex; flex-direction:column; } .ccmy-list { flex:1; min-height:0; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.ccmy-thread { flex:1; min-height:0; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.ccmy-msg { max-width:90%; align-self:flex-start; border-radius:4px 18px 18px 18px; background:var(--raised); border:1px solid var(--line); font-size:12.5px; overflow:hidden; overflow-wrap:anywhere; }
+.ccmy-msg-body { padding:10px 15px; } .ccmy-msg .md-body { background:none; border:none; padding:0; margin:0; box-shadow:none; font-size:12.5px; } .ccmy-msg .md-body > :first-child { margin-top:0; } .ccmy-msg .md-body > :last-child { margin-bottom:0; }
+.ccmy-msg.me { align-self:flex-end; max-width:80%; padding:9px 15px; border-radius:18px 18px 4px 18px; background:var(--acc); border-color:var(--acc); color:#1d1310; font-weight:500; white-space:pre-wrap; }
+.ccmy-cap { padding:5px 15px; font-size:11.5px; font-weight:600; background:color-mix(in srgb, var(--ok) 13%, transparent); color:color-mix(in srgb, var(--ok) 75%, var(--fg)); } .ccmy-msg.alert.needs .ccmy-cap { background:color-mix(in srgb, var(--warn) 13%, transparent); color:color-mix(in srgb, var(--warn) 80%, var(--fg)); }
+.ccmy-msg.error { padding:9px 15px; color:var(--bad, #e06c75); border-color:color-mix(in srgb, var(--bad, #e06c75) 40%, var(--line)); white-space:pre-wrap; }
+.ccmy-msg.confirm { align-self:stretch; max-width:none; padding:11px 15px; border-radius:18px; border-color:color-mix(in srgb, var(--warn) 45%, var(--line)); background:var(--card-bg); }
+.ccmy-msg.confirm pre { margin:7px 0 9px; padding:9px; border-radius:10px; background:var(--bg); white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.5 ui-monospace, Menlo, monospace; max-height:10em; overflow:auto; }
+.ccmy-acts { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; } .ccmy-card .ccmy-acts { justify-content:flex-end; margin-top:0; } .ccmy-acts input { flex:1; min-width:0; }
+html #ccmy :is(.ccmy-acts, .ccmy-chips) button { all:unset; padding:4px 13px; border-radius:14px; font-size:12px; line-height:1.5; cursor:pointer; background:color-mix(in srgb, var(--fg) 5%, transparent); border:1px solid var(--line2); color:var(--fg); }
+html #ccmy :is(.ccmy-acts, .ccmy-chips) button:hover { background:color-mix(in srgb, var(--fg) 11%, transparent); } html #ccmy :is(.ccmy-acts, .ccmy-chips) button:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+html #ccmy .ccmy-acts button.p { background:color-mix(in srgb, var(--acc) 15%, transparent); border-color:color-mix(in srgb, var(--acc) 50%, transparent); color:color-mix(in srgb, var(--acc) 70%, var(--fg)); }
+.ccmy-sent { font-size:12px; color:var(--dim); overflow-wrap:anywhere; } .ccmy-card .ccmy-sent { margin-bottom:8px; }
+.ccmy-think { display:flex; align-items:flex-end; gap:8px; align-self:flex-start; } .ccmy-think > .ccmy-ico { width:30px; height:30px; animation:ccmy-bob 1.4s ease-in-out infinite; }
+.ccmy-think-bubble { display:flex; align-items:center; gap:10px; padding:8px 8px 8px 14px; border-radius:18px 18px 18px 4px; background:var(--raised); border:1px solid var(--line); font-size:12.5px; }
+.ccmy-dots { display:inline-flex; gap:4px; } .ccmy-dots i { width:6px; height:6px; border-radius:50%; background:var(--acc); animation:ccmy-dot 1.2s ease-in-out infinite; } .ccmy-dots i:nth-child(2) { background:var(--warn); animation-delay:.15s; } .ccmy-dots i:nth-child(3) { background:var(--ok); animation-delay:.3s; }
+.ccmy-think-text { color:transparent; background:linear-gradient(90deg, var(--dim) 35%, var(--fg) 50%, var(--dim) 65%) 0 0 / 250% 100%; -webkit-background-clip:text; background-clip:text; animation:ccmy-shimmer 1.8s linear infinite; }
+html .ccmy-think button { all:unset; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; cursor:pointer; background:color-mix(in srgb, var(--fg) 8%, transparent); } html .ccmy-think button::before { content:''; width:8px; height:8px; border-radius:2px; background:var(--dim); } html .ccmy-think button:hover::before { background:var(--bad, #e06c75); }
+@keyframes ccmy-dot { 0%, 60%, 100% { transform:translateY(0); opacity:.45; } 30% { transform:translateY(-5px); opacity:1; } }
+@keyframes ccmy-shimmer { from { background-position:100% 0; } to { background-position:-150% 0; } }
+@media (prefers-reduced-motion: reduce) { .ccmy-think > .ccmy-ico, .ccmy-dots i, .ccmy-think-text { animation:none; } .ccmy-think-text { color:var(--dim); background:none; } }
+.ccmy-chips { display:flex; gap:6px; padding:0 16px 10px; overflow:hidden; } html #ccmy .ccmy-chips button { flex:none; font-size:11.5px; color:var(--dim); }
+.ccmy-ask { display:flex; gap:8px; align-items:flex-end; margin:0 14px 14px; padding:6px 6px 6px 16px; border-radius:22px; background:var(--panel); border:1px solid var(--line2); } .ccmy-ask:focus-within { border-color:color-mix(in srgb, var(--acc) 60%, var(--line2)); }
+html .ccmy-ask textarea { all:unset; flex:1; min-width:0; max-height:120px; padding:6px 0; font:inherit; font-size:13px; color:var(--fg); overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; cursor:text; } .ccmy-ask textarea::placeholder { color:var(--dim); opacity:.7; }
+html .ccmy-ask button { all:unset; flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(135deg, color-mix(in srgb, var(--acc) 75%, #fff), var(--acc)); color:#1a1210; font-weight:700; cursor:pointer; }
+/* 세션 tab: plain cards */
+.ccmy-card { padding:10px 14px; border-radius:16px; background:var(--raised); border:1px solid var(--line); }
+.ccmy-card.needs { border-color:color-mix(in srgb, var(--warn) 45%, var(--line)); background:var(--card-bg); }
+.ccmy-card-head { display:flex; align-items:center; gap:8px; min-width:0; } .ccmy-card-head b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ccmy-tag { flex:none; padding:0 7px; border-radius:7px; font-size:10.5px; font-weight:700; line-height:1.6; background:var(--ok); color:#10261a; } .ccmy-card.needs .ccmy-tag { background:var(--warn); color:#1a1a1a; }
+.ccmy-card.recent .ccmy-tag { background:var(--line2); color:var(--fg); } .ccmy-card.work .ccmy-tag { background:var(--acc); color:#1a1a1a; }
+.ccmy-body { margin:6px 0 8px; font-size:12.5px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:9em; overflow:auto; } .ccmy-body:empty { display:none; }
+.ccmy-empty { padding:26px 12px; text-align:center; color:var(--dim); font-size:12.5px; line-height:1.7; }
+/* 모양 › CCMy */
+.look-field { display:flex; align-items:center; gap:10px; margin:14px 0 4px; font-size:13px; } .look-field select { width:220px; } .look-field input[type=number] { width:90px; }
+.look-label { margin:16px 0 8px; font-size:13px; }
+.ccmy-pick { display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; }
+html .ccmy-pick button { all:unset; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 4px 8px; border-radius:12px; border:1px solid var(--line); font-size:11.5px; color:var(--dim); cursor:pointer; } .ccmy-pick svg { width:52px; height:52px; }
+html .ccmy-pick button:hover { background:var(--hover); } html .ccmy-pick button.sel { border-color:var(--acc); color:var(--fg); background:color-mix(in srgb, var(--acc) 10%, transparent); } html .ccmy-pick button:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+html #ccmy .ccmy-bulk { all:unset; align-self:stretch; text-align:center; padding:6px 12px; border-radius:12px; border:1px dashed var(--line2); color:var(--dim); font-size:12px; cursor:pointer; } html #ccmy .ccmy-bulk:hover { color:var(--fg); background:var(--hover); }
+.ccmy-thread > *, .ccmy-list > * { flex:none; } /* a flex column would squeeze the bubbles (they clip their own overflow) instead of scrolling */
+/* 이어서 진행 */
+.ccmy-msg.note { align-self:center; max-width:100%; padding:2px 12px; border-radius:11px; background:none; border:1px dashed var(--line2); color:var(--dim); font-size:11.5px; text-align:center; }
+.ccmy-msg.alert.auto .ccmy-cap, .ccmy-card.auto .ccmy-tag { background:color-mix(in srgb, #5b8def 18%, transparent); color:color-mix(in srgb, #5b8def 70%, var(--fg)); }
+.ccmy-msg.confirm.auto, .ccmy-card.auto { border-color:color-mix(in srgb, #5b8def 45%, var(--line)); background:color-mix(in srgb, #5b8def 7%, var(--bg)); }

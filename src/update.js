@@ -1,8 +1,9 @@
 'use strict';
 // App updates without a server: the public repo's GitHub Release feed. `latest` asks releases/latest (no token; 60 calls/h is
 // plenty for a check at start and every few hours), compares the tag with the running version and picks this machine's
-// installer among the assets. `fetchAsset` streams it into ~/Downloads; the renderer then opens it (a dmg mounts, an exe runs).
+// installer among the assets. `fetchAsset` streams it into ~/Downloads. macOS: `installMac` swaps the app in place and reopens it; elsewhere the file is opened (an exe runs).
 const https = require('https'), fs = require('fs'), path = require('path'), os = require('os');
+const { execFile, spawn } = require('child_process');
 const REPO = 'suslmk-lee/claude-code-manager';
 const UA = 'claude-code-manager';
 const nums = (v) => (String(v || '').match(/\d+/g) || []).slice(0, 3).map(Number);
@@ -54,4 +55,30 @@ async function fetchAsset(info, dir, progress) {
   await download(info.asset.url, dest, progress);
   return dest;
 }
-module.exports = { REPO, newer, pickAsset, latest, fetchAsset, download };
+// ---- install without the user closing the app (macOS) ----
+// The running bundle (…/Claude Code Manager.app) when it can be replaced in place: a packaged .app in a writable folder.
+function macTarget(execPath = process.execPath) {
+  const t = path.resolve(execPath, '../../..');
+  if (process.platform !== 'darwin' || !t.endsWith('.app')) return null;
+  try { fs.accessSync(path.dirname(t), fs.constants.W_OK); return t; } catch { return null; }
+}
+const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, (e, out, err) => (e ? reject(new Error(`${cmd}: ${String(err || e.message).trim()}`)) : resolve(out))));
+// Copies the new app out of the dmg next to the old one (<app>.update) while this app still runs, so a broken download fails
+// here and changes nothing. Then leaves a detached shell waiting for `pid` to exit: it swaps the folders (putting the old one
+// back if the swap fails) and opens the app again. The caller quits right after.
+async function installMac(dmg, target, { pid = process.pid, relaunch = true } = {}) {
+  const mnt = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ccm-update-'));
+  const staged = `${target}.update`;
+  await run('hdiutil', ['attach', dmg, '-nobrowse', '-readonly', '-mountpoint', mnt]);
+  try {
+    const name = (await fs.promises.readdir(mnt)).find((f) => f.endsWith('.app'));
+    if (!name) throw new Error('설치 이미지에 앱이 없습니다');
+    await fs.promises.rm(staged, { recursive: true, force: true });
+    await run('ditto', [path.join(mnt, name), staged]);
+  } finally { await run('hdiutil', ['detach', mnt, '-force']).catch(() => {}); fs.promises.rm(mnt, { recursive: true, force: true }).catch(() => {}); }
+  // ponytail: waits up to 30 s for the app to exit, then swaps anyway (a hung quit would otherwise leave the update staged forever)
+  const sh = 'n=0; while kill -0 "$2" 2>/dev/null && [ $n -lt 150 ]; do sleep 0.2; n=$((n+1)); done; rm -rf "$1.old"; mv "$1" "$1.old" && { mv "$1.update" "$1" && rm -rf "$1.old" || mv "$1.old" "$1"; }; [ "$3" = 1 ] && open "$1"';
+  spawn('/bin/sh', ['-c', sh, 'sh', target, String(pid), relaunch ? '1' : '0'], { detached: true, stdio: 'ignore' }).unref();
+  return target;
+}
+module.exports = { REPO, newer, pickAsset, latest, fetchAsset, download, macTarget, installMac };

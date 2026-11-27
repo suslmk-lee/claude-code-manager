@@ -5,6 +5,7 @@ const fs = require('fs');
 const pty = require('node-pty');
 const data = require('./data');
 const chat = require('./chat');
+const ccmy = require('./ccmy');
 const appusage = require('./appusage'); // 사내 앱 사용 기록 (QuantumMate)
 
 data.setCacheDir(path.join(app.getPath('userData'), 'cache'));
@@ -34,7 +35,7 @@ function createWindow() {
   if (!isMac) { win.on('page-title-updated', (e) => e.preventDefault()); win.on('focus', () => win.flashFrame(false)); } // keep the "(n)" badge title
   // Everything the page owns dies with the page: on close, and on a reload (보기 → Reload) too. Reusing a live attach pty
   // after a reload would hand the fresh xterm a TUI whose init (alternate screen, mouse tracking…) was sent to the old one.
-  const releasePageResources = () => { for (const p of ptys.values()) p.kill(); ptys.clear(); attachPtys.clear(); ptyLast.clear(); chat.closeAll(); stopTail(); };
+  const releasePageResources = () => { for (const p of ptys.values()) p.kill(); ptys.clear(); attachPtys.clear(); ptyLast.clear(); chat.closeAll(); ccmy.close(); stopTail(); };
   win.on('closed', () => { win = null; releasePageResources(); });
   win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) releasePageResources(); });
   // links in rendered markdown open in the browser; the window itself never navigates away
@@ -115,9 +116,14 @@ ipcMain.handle('update:download', async () => {
   try {
     const info = await update.latest(app.getVersion());
     const file = await update.fetchAsset(info, app.getPath('downloads'), (got, total) => { if (win && !win.isDestroyed()) win.webContents.send('update:progress', { got, total }); });
-    const err = await shell.openPath(file); // a dmg mounts and opens in Finder; an exe runs the installer
+    if (app.isPackaged && update.macTarget()) return { file, auto: true }; // the window asks, then update:install swaps the app and restarts it
+    const err = await shell.openPath(file); // by hand: a dmg mounts and opens in Finder; an exe runs the installer
     return err ? { file, error: err } : { file };
   } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('update:install', async (_e, file) => {
+  try { await update.installMac(String(file), update.macTarget()); setTimeout(() => app.quit(), 200); return { ok: true }; } // the reply goes out before the quit
+  catch (e) { return { error: e.message }; }
 });
 ipcMain.on('update:open', (_e, url) => { if (/^https:\/\/github\.com\//.test(String(url))) shell.openExternal(url); });
 function scheduleUpdateChecks() {
@@ -197,7 +203,7 @@ ipcMain.handle('pty:open', (_e, { args = [], cwd, cols, rows, shell, profile }) 
 });
 // Type a message into a running background session through its attach client (hidden one if the terminal tab is closed).
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-ipcMain.handle('pty:sendToSession', async (_e, { short, cwd, text, profile }) => {
+async function sendToSession({ short, cwd, text, profile }) {
   if (!/^[0-9a-f]{8}$/.test(short)) throw new Error('bad id');
   let id = attachPtys.get(short);
   if (!id || !ptys.has(id)) {
@@ -210,7 +216,22 @@ ipcMain.handle('pty:sendToSession', async (_e, { short, cwd, text, profile }) =>
   await sleep(120);
   p.write('\r');
   return { ok: true, ptyId: id };
-});
+}
+ipcMain.handle('pty:sendToSession', (_e, req) => sendToSession(req));
+// ---- CCMy agent (src/ccmy.js): session facts come from the window, which already holds the polled list and the tabs ----
+const ccmyDeps = {
+  sessions: () => win.webContents.executeJavaScript('ccmySnapshot()'),
+  open: (sessionId) => win.webContents.executeJavaScript(`openSession(${JSON.stringify(sessionId)})`),
+  send: sendToSession,
+  autoCheck: (id) => win.webContents.executeJavaScript(`ccmyAutoCheck(${JSON.stringify(id)})`),
+  autoSent: (id, text) => win.webContents.executeJavaScript(`ccmyAutoSent(${JSON.stringify(id)}, ${JSON.stringify(text)})`),
+  autoOff: (id, why) => win.webContents.executeJavaScript(`ccmyAutoOff(${JSON.stringify(id)}, ${JSON.stringify(why)})`),
+  dismiss: (ids) => win.webContents.executeJavaScript(`setNeedsOff(${JSON.stringify(ids)})`),
+};
+ipcMain.handle('ccmy:send', (_e, { text, model, conv }) => ccmy.send(conv === 'auto' ? 'auto' : 'chat', text, ccmyDeps, (msg) => send('ccmy:event', msg), model));
+ipcMain.handle('ccmy:confirm', (_e, { id, ok }) => ccmy.confirm(id, ok));
+ipcMain.handle('ccmy:interrupt', () => ccmy.interrupt());
+ipcMain.handle('ccmy:close', (_e, conv) => ccmy.close(conv));
 
 // ---- live transcript tail (one watched file at a time) ----
 let tail = null; // { sessionId, file, offset, watcher, timer }

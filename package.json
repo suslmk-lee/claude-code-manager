@@ -1,6 +1,6 @@
 {
   "name": "claude-code-manager",
-  "version": "0.1.37",
+  "version": "0.1.52",
   "description": "Desktop manager for Claude Code sessions, memory and stats",
   "main": "src/main.js",
   "private": true,
@@ -24,7 +24,8 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "marked": "18.1.0",
-    "node-pty": "^1.1.0"
+    "node-pty": "^1.1.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "electron": "^44.6.0",
