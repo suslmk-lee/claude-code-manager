@@ -130,6 +130,11 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   needs-input / finished alert is handed to it, so it reads the session and briefs (one-line peek beside the bubble; the
   panel opens on a click only). 이어서 진행 (tab menu, with a goal): CCMy answers a stopped session by itself — at most
   5 sends / 2 h, never merge · push · deploy · delete · payment · outward messages, never a permission menu. 세션: the plain card list. Drag to move; 모양 › 알림 hides it or turns the briefing off.
+- **CCMy 기억** — plain files in `~/.claude/ccmy` (`src/ccmymem.js`), editable by hand and under 모양 › 기억. `notes.md`:
+  지침 CCMy follows after a restart, `# 전체` for everything and `# <folder>` for sessions in that folder (이어서 진행
+  included); saved from the conversation only after a 저장 click, never from an 이어서 진행 decision, and they cannot lift
+  the forbidden list. `journal/YYYY-MM-DD.md`: one line per finished piece of work (10 s or more; a one-shot haiku call
+  summarises the last turns), which answers "어제 뭐 했지" / "이번 주 한 일".
 - **사내 앱 사용 기록** — the packaged app posts `{ app: "claude-code-manager", version, minutes }` to the QuantumMate
   server (`{endpoint}/apps/usage`, bearer token from `~/Library/Application Support/ai.quantumcns.quantummate/collect.json`,
   written by the QuantumMate team app): 0 on start, 5 per five 1-minute ticks, the rest on quit. No file → nothing is

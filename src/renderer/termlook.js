@@ -182,6 +182,8 @@ function openLook() {
       el('p', { class: 'hint', text: '화면 구석에 떠 있는 에이전트입니다. 세션 상태를 묻거나 세션에 시킬 일을 말하면 대신 확인하고 전달합니다. 끌어서 옮길 수 있습니다.' }),
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmyBrief === 'off' ? null : '', onchange: (e) => { LOOK.ccmyBrief = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 알림이 오면 세션을 읽고 요약'),
       el('p', { class: 'hint', text: '입력 대기 · 작업 완료가 생기면 CCMy가 그 세션의 최근 대화를 읽고 무슨 일인지 알려 줍니다. 알림마다 토큰을 조금 씁니다. 꺼도 대화는 할 수 있습니다.' }),
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmySound === 'off' ? null : '', onchange: (e) => { LOOK.ccmySound = e.target.checked ? 'on' : 'off'; applyLook(); if (e.target.checked) ccmyRing(); } }), ' 알림 소리'),
+      el('p', { class: 'hint', text: '입력 대기 · 작업 완료 알림이 오면 버블이 커졌다 돌아오면서 소리를 냅니다. 켜 두면 시스템 알림의 소리는 끄고 이 소리만 냅니다. 끄면 버블만 움직입니다.' }),
       el('label', { class: 'look-field' }, '모델', el('select', { onchange: (e) => { LOOK.ccmyModel = e.target.value; applyLook(); ccmyApplyLook(true); } }, // a <select>, not a datalist: select.js themes its list
         ...[...new Set(['haiku', 'sonnet', 'opus', 'fable', ccmyModel()])].map((m) => el('option', { value: m, text: m === 'haiku' ? 'haiku (기본)' : m, selected: m === ccmyModel() ? '' : null })))),
       el('p', { class: 'hint', text: '기본은 haiku 입니다. sonnet · opus · fable 은 판단이 낫지만 알림 요약마다 드는 토큰이 늘어납니다. 바꾸면 CCMy와의 대화가 새로 시작됩니다.' }),
@@ -198,6 +200,21 @@ function openLook() {
         el('label', { class: 'look-field' }, '시간', num('ccmyAutoHours', 2, 0.25, 24, 0.25), '시간'),
         el('p', { class: 'hint', text: '켠 뒤 이 시간이 지나면 꺼집니다 (0.25 ~ 24).' }),
         el('p', { class: 'hint', text: '바꿀 수 없는 것 :: 머지 · 푸시 · 배포 · 릴리스 · 삭제 · 결제 · 외부 전송에 관한 질문과 권한 승인 메뉴에는 답하지 않고 항상 알림으로 넘깁니다. 앱을 다시 켜면 이어서 진행은 모두 꺼집니다.' })); }],
+    ['ccmyMem', '기억', () => { // CCMy's memory folder (src/ccmymem.js): the notes it follows, and the work journal switch
+      const list = el('div', { class: 'ccmy-notes' }), where = el('code', {});
+      const scope = el('select', {}, el('option', { value: '', text: '전체' }), ...[...new Set(S.sessions.filter((x) => S.tabs.includes(x.sessionId) && x.cwd).map((x) => x.cwd))].map((c) => el('option', { value: c, text: c.split('/').pop() })));
+      const fill = async () => { const r = await api.ccmyNotes(); where.textContent = r.home;
+        list.replaceChildren(...(r.notes.length ? r.notes.map((n) => el('div', { class: 'ccmy-note' }, el('span', { class: 'ccmy-tag', text: n.scope.split('/').pop(), 'data-tip': n.scope }), el('span', { text: n.text }), el('button', { class: 'x', text: '×', 'aria-label': '지우기', onclick: async () => { await api.ccmyNoteDel(n.text, n.scope); fill(); } })))
+          : [el('p', { class: 'hint', text: '저장된 지침이 없습니다. CCMy에게 "앞으로 답은 세 줄 이내로 해, 기억해"처럼 말하거나 아래에 직접 적어 주세요.' })])); };
+      const text = el('input', { placeholder: '지침을 쓰고 Enter', maxlength: '300', onkeydown: async (e) => { if (e.key !== 'Enter' || e.isComposing || !text.value.trim()) return; try { await api.ccmyNoteAdd(text.value, scope.value); text.value = ''; } catch (err) { alert(String(err.message).replace(/^.*?Error: /, '')); } fill(); } });
+      fill();
+      return el('div', {},
+        el('p', { class: 'hint' }, 'CCMy가 앱을 다시 켜도 기억하는 것들입니다. 폴더 ', where, ' 에 일반 글 파일로 있어 직접 열어 고칠 수 있습니다. ', el('button', { text: '폴더 열기', onclick: () => api.ccmyOpenHome() })),
+        el('div', { class: 'look-label', text: '지침' }), list,
+        el('div', { class: 'ccmy-note-add' }, scope, text),
+        el('p', { class: 'hint', text: '「전체」 지침은 항상, 폴더 지침은 그 폴더의 세션을 다룰 때(이어서 진행 포함) 따릅니다. 대화에서 저장할 때는 저장 버튼을 눌러야 들어갑니다. 지침으로도 이어서 진행의 금지 항목은 풀리지 않습니다.' }),
+        el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmyJournal === 'off' ? null : '', onchange: (e) => { LOOK.ccmyJournal = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 작업 일지 쓰기'),
+        el('p', { class: 'hint', text: '10초 넘게 작업한 세션이 멈출 때마다 한 일을 한 줄로 요약해 날짜별 파일(journal 폴더)에 적습니다. CCMy에게 "어제 뭐 했지", "이번 주 한 일 정리해줘"라고 물으면 이 일지로 답합니다. 한 줄마다 haiku 를 한 번 부릅니다.' })); }],
     ['termTheme', '터미널 테마', () => el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row glass' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
       swatch(t), el('span', { class: 'theme-name', text: t.name }))))],
   ];
@@ -207,6 +224,7 @@ function openLook() {
     term: '<path d="M4.5 18L9 6l4.5 12M6 14h6M15.5 18v-5.500M15.5 14.500a2.5 2.5 0 0 1 5 0V18"/>',
     notify: '<path d="M6.5 16.5v-5a5.5 5.5 0 0 1 11 0v5l1.5 2h-14z"/><path d="M10 20.5h4"/>',
     ccmyAuto: '<path d="M5 12a7 7 0 0 1 12-4.9L19 9M19 4.500V9h-4.500M19 12a7 7 0 0 1-12 4.900L5 15M5 19.500V15h4.5"/>',
+    ccmyMem: '<path d="M6 4.500h9.500L19 8v11.500H6z"/><path d="M9 10h6M9 13.500h6M9 17h3.5"/>',
     ccmy: '<rect x="5" y="8" width="14" height="11" rx="4"/><path d="M12 8V4.500M9.5 13.500h.01M14.5 13.500h.01"/>',
     termTheme: '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M7.5 10l3 2.5-3 2.500M13 15h3.5"/>',
   };

@@ -48,7 +48,7 @@ const ccmyChat = el('div', { class: 'ccmy-chat' }, ccmyThread, el('div', { class
 const ccmyCount = el('span', { class: 'pill', hidden: '' });
 const ccmyModelChip = el('span', { class: 'ccmy-model', 'data-tip': 'CCMy가 쓰는 모델 (모양 › CCMy에서 바꿉니다)' });
 const ccmySeg = el('div', { class: 'ccmy-seg' }, ...[['chat', '대화'], ['list', '세션']].map(([v, t]) => el('button', { 'data-v': v, onclick: () => { CCMY.view = v; ccmyRender(); if (v === 'chat') ccmyInput.focus(); } }, t, v === 'list' ? ccmyCount : null)));
-const ccmyQuick = el('div', { class: 'ccmy-chips' }, ...[['지금 상황 정리', '지금 상황 정리해줘'], ['입력 대기 세션', '입력 기다리는 세션 뭐야?'], ['방금 끝난 작업', '방금 끝난 작업 요약해줘']].map(([t, q]) => el('button', { text: t, onclick: () => ccmyAsk(q) })));
+const ccmyQuick = el('div', { class: 'ccmy-chips' }, ...[['지금 상황 정리', '지금 상황 정리해줘'], ['입력 대기 세션', '입력 기다리는 세션 뭐야?'], ['방금 끝난 작업', '방금 끝난 작업 요약해줘'], ['오늘 한 일', '오늘 한 일을 작업 일지로 정리해줘']].map(([t, q]) => el('button', { text: t, onclick: () => ccmyAsk(q) })));
 ccmyChat.insertBefore(ccmyQuick, ccmyChat.lastChild);
 const ccmyPanel = el('div', { class: 'ccmy-panel', hidden: '', onkeydown: (e) => { if (e.key === 'Escape') { e.stopPropagation(); ccmyToggle(false); } } },
   el('div', { class: 'ccmy-head' },
@@ -115,7 +115,7 @@ function ccmyAutoOff(id, why) {
   const a = CCMY.auto.get(id); if (!a) return;
   CCMY.auto.delete(id);
   CCMY.msgs.push({ who: 'note', text: `이어서 진행 끝 · ${a.name} :: ${why}` });
-  ccmyPeek(`이어서 진행 끝 :: ${a.name}`); ccmyRender(); ccmyThreadRender();
+  ccmyRing(); ccmyPeek(`이어서 진행 끝 :: ${a.name}`); ccmyRender(); ccmyThreadRender();
 }
 function ccmyAutoStart(s) {
   const goal = el('textarea', { rows: '3', placeholder: '예: KSHQ-140 구현을 테스트 통과까지 끝낸다' });
@@ -137,7 +137,7 @@ function ccmyAutoStep(s, what) {
   const a = CCMY.auto.get(s.sessionId); if (!a) return false;
   const stop = a.count >= a.max ? `자동 전송 ${a.max}회를 다 썼습니다` : Date.now() > a.until ? `${a.hours}시간이 지났습니다` : !(s.live && s.kind === 'background') ? '세션이 실행 중이 아닙니다' : '';
   if (stop) { ccmyAutoOff(s.sessionId, stop); return false; }
-  ccmyPrompt(`[자동 진행] 세션 "${s.name}" (id ${s.short}) 이 멈췄습니다 (${what})${s.job?.needs ? ` · 질문: ${s.job.needs}` : ''}\n목표: ${a.goal}\n자동 전송 ${a.count}/${a.max}회 사용.`, { sessionId: s.sessionId, cap: `이어서 진행 · ${s.name}`, kind: 'auto' });
+  ccmyPrompt(`[자동 진행] 세션 "${s.name}" (id ${s.short}) 이 멈췄습니다 (${what})${s.job?.needs ? ` · 질문: ${s.job.needs}` : ''}\n폴더: ${s.cwd}\n목표: ${a.goal}\n자동 전송 ${a.count}/${a.max}회 사용.`, { sessionId: s.sessionId, cap: `이어서 진행 · ${s.name}`, kind: 'auto' });
   return true;
 }
 // for the auto_continue tool (src/main.js → src/ccmy.js)
@@ -150,8 +150,27 @@ function ccmyAutoSent(sessionId, text) {
   const a = CCMY.auto.get(sessionId); if (!a) return;
   a.count++; CCMY.msgs.push({ who: 'auto', name: a.name, sessionId, text, n: a.count, max: a.max }); ccmyRender(); ccmyThreadRender();
 }
+// An alert should be hard to miss: the bubble swells twice and a short two-note chime plays (모양 › CCMy › 알림 소리).
+// With the chime on, the OS notifications in app.js go silent so one alert does not sound twice.
+const ccmySoundOn = () => !(typeof LOOK !== 'undefined' && LOOK.ccmySound === 'off');
+let ccmyAudio = null;
+function ccmyRing() {
+  if (ccmyRoot.hidden) return;
+  ccmyFab.classList.remove('ring'); void ccmyFab.offsetWidth; ccmyFab.classList.add('ring'); // restart if one is already running
+  if (!ccmySoundOn()) return;
+  try {
+    const ac = ccmyAudio || (ccmyAudio = new AudioContext()), t0 = ac.currentTime;
+    for (const [f, at] of [[880, 0], [1318.5, 0.16]]) { // A5 → E6
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(0.22, t0 + at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.5);
+      o.connect(g).connect(ac.destination); o.start(t0 + at); o.stop(t0 + at + 0.55);
+    }
+  } catch { /* no audio device: the animation alone */ }
+}
+ccmyFab.addEventListener('animationend', (e) => { if (e.animationName === 'ccmy-ring') ccmyFab.classList.remove('ring'); });
 function ccmyAlert(s, what) {
   if (ccmyAutoStep(s, what)) return ccmyPeek(`이어서 진행 :: ${s.name}`);
+  ccmyRing();
   ccmyPeek(`${what} :: ${s.name}`);
   if (ccmyRoot.hidden || (typeof LOOK !== 'undefined' && LOOK.ccmyBrief === 'off')) return;
   ccmyPrompt(`[이벤트] ${what} :: 세션 "${s.name}" (id ${s.short})${s.job?.needs ? ` · 질문: ${s.job.needs}` : ''}`, { sessionId: s.sessionId, cap: `${what} · ${s.name}`, kind: what === '작업 완료' ? 'done' : 'needs' });
@@ -176,7 +195,7 @@ function ccmyAsk(text = ccmyInput.value.trim()) {
   ccmyPrompt(text);
 }
 function ccmyReset() { api.ccmyClose('chat'); CCMY.msgs = []; CCMY.turns = CCMY.turns.filter((t) => t.conv !== 'chat'); CCMY.status = CCMY.turns.length ? '생각 중…' : ''; ccmyThreadRender(); }
-const CCMY_TOOL = { auto_continue: '이어서 진행 판단 중…', dismiss_waiting: '입력 대기 정리 중…', list_sessions: '세션 목록 확인 중…', read_session: '세션 대화 읽는 중…', open_session: '세션 여는 중…', send_to_session: '전송 확인을 기다리는 중…' };
+const CCMY_TOOL = { auto_continue: '이어서 진행 판단 중…', dismiss_waiting: '입력 대기 정리 중…', list_sessions: '세션 목록 확인 중…', read_session: '세션 대화 읽는 중…', open_session: '세션 여는 중…', send_to_session: '전송 확인을 기다리는 중…', remember: '저장 확인을 기다리는 중…', forget: '지침 지우는 중…', read_journal: '작업 일지 읽는 중…' };
 api.onCcmyEvent((m) => {
   if (m.type === 'assistant' && !m.parent_tool_use_id) {
     const c = m.message?.content || [], text = c.filter((b) => b.type === 'text').map((b) => b.text).join('').trim(), use = c.find((b) => b.type === 'tool_use');
@@ -185,7 +204,7 @@ api.onCcmyEvent((m) => {
   } else if (m.type === 'result') {
     { const i = CCMY.turns.findIndex((t) => t.conv === m.conv); if (i !== -1) CCMY.turns.splice(i, 1); } CCMY.status = CCMY.turns.length ? '생각 중…' : '';
     if (m.is_error) CCMY.msgs.push({ who: 'error', text: '오류: ' + (m.result || m.subtype || '응답을 받지 못했습니다') });
-  } else if (m.type === 'confirm') CCMY.msgs.push({ who: 'confirm', id: m.id, name: m.name, sessionId: m.sessionId, text: m.text, state: 'ask' });
+  } else if (m.type === 'confirm') CCMY.msgs.push({ who: 'confirm', id: m.id, keep: m.kind === 'remember', name: m.name, sessionId: m.sessionId, text: m.text, state: 'ask' });
   else if (m.type === 'confirm_cancelled') { const c = CCMY.msgs.find((x) => x.who === 'confirm' && x.id === m.id); if (c) c.state = 'no'; }
   else if (m.type === 'error' || m.type === 'closed') { if (m.type === 'error') CCMY.msgs.push({ who: 'error', text: '오류: ' + m.message }); CCMY.turns = CCMY.turns.filter((t) => t.conv !== m.conv); CCMY.status = CCMY.turns.length ? '생각 중…' : ''; }
   else return;
@@ -219,9 +238,9 @@ function ccmyThreadRender() {
     : m.who === 'error' ? el('div', { class: 'ccmy-msg error', text: m.text })
     : m.who === 'note' ? el('div', { class: 'ccmy-msg note', text: m.text })
     : m.who === 'auto' ? el('div', { class: 'ccmy-msg confirm auto' }, el('div', { class: 'ccmy-confirm-head' }, el('b', { text: m.name }), ` 세션에 자동 전송 (${m.n}/${m.max})`), el('pre', { text: m.text }), el('div', { class: 'ccmy-acts' }, go(m.sessionId), CCMY.auto.has(m.sessionId) ? el('button', { text: '이어서 진행 끄기', onclick: () => ccmyAutoOff(m.sessionId, '사용자가 껐습니다') }) : null))
-    : m.who === 'confirm' ? el('div', { class: 'ccmy-msg confirm' }, el('div', { class: 'ccmy-confirm-head' }, el('b', { text: m.name }), ' 세션에 보냅니다'), el('pre', { text: m.text }),
-      m.state === 'ask' ? el('div', { class: 'ccmy-acts' }, el('button', { text: '취소', onclick: () => answer(m, false) }), el('button', { class: 'p', text: '보내기', onclick: () => answer(m, true) }))
-        : el('div', { class: 'ccmy-sent', text: m.state === 'yes' ? '보냄' : m.state === 'wait' ? '보내는 중…' : '취소함' }))
+    : m.who === 'confirm' ? el('div', { class: 'ccmy-msg confirm' }, el('div', { class: 'ccmy-confirm-head' }, ...(m.keep ? ['지침으로 기억합니다 · ', el('b', { text: m.name.split('/').pop() })] : [el('b', { text: m.name }), ' 세션에 보냅니다'])), el('pre', { text: m.text }),
+      m.state === 'ask' ? el('div', { class: 'ccmy-acts' }, el('button', { text: '취소', onclick: () => answer(m, false) }), el('button', { class: 'p', text: m.keep ? '저장' : '보내기', onclick: () => answer(m, true) }))
+        : el('div', { class: 'ccmy-sent', text: m.state === 'yes' ? (m.keep ? '저장함 (모양 › 기억에서 지울 수 있습니다)' : '보냄') : m.state === 'wait' ? '보내는 중…' : '취소함' }))
     : bot(m))
     : [el('div', { class: 'ccmy-msg bot' }, el('div', { class: 'ccmy-msg-body' }, '안녕하세요, CCMy입니다. 세션들을 지켜보다가 입력 대기나 작업 완료가 생기면 내용을 읽고 알려 드립니다. 세션에 시킬 일을 말하면 대신 전달합니다.'))]));
   // working: the character with three bouncing dots and what it is doing, as the last bubble of the thread

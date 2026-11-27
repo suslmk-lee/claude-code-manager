@@ -145,7 +145,10 @@ function trackDone() {
     if (a === 'working') { if (!workingSince.has(id)) workingSince.set(id, Date.now()); continue; }
     const since = workingSince.get(id);
     workingSince.delete(id);
-    if (!since || !doneBooted || a === 'blocked') continue;
+    if (!since || !doneBooted) continue;
+    // CCMy 작업 일지: work of 10 s or more that ended, or stopped on a question (a bare wait may be a permission menu mid-work)
+    if (Date.now() - since >= 10000 && (a !== 'blocked' || s.job?.needs) && !(typeof LOOK !== 'undefined' && LOOK.ccmyJournal === 'off')) api.ccmyJournal({ sessionId: id, name: s.name, cwd: s.cwd, fallback: s.job?.detail || s.lastPrompt || '' }).catch(() => {});
+    if (a === 'blocked') continue;
     // CCMy 이어서 진행: every stop counts, short turns and the session on screen included; it answers instead of notifying
     if (typeof ccmyAutoOn === 'function' && ccmyAutoOn(id)) { if (ccmyAutoStep(s, '작업을 멈춤')) continue; }
     if (Date.now() - since < 10000) continue;
@@ -153,7 +156,7 @@ function trackDone() {
     if (typeof ccmyDone === 'function') ccmyDone(s); // the CCMy card stays even with the OS notification switched off
     if (typeof LOOK !== 'undefined' && LOOK.doneNotify === 'off') continue;
     try {
-      const n = new Notification(`작업 완료: ${s.name}`, { body: s.job?.detail || '세션이 작업을 마쳤습니다', silent: false });
+      const n = new Notification(`작업 완료: ${s.name}`, { body: s.job?.detail || '세션이 작업을 마쳤습니다', silent: typeof ccmySoundOn === 'function' && ccmySoundOn() && LOOK.ccmy !== 'off' });
       n.onclick = () => { api.focusWindow(); openSession(id); };
     } catch { /* notifications unavailable */ }
   }
@@ -175,7 +178,7 @@ function notifyNeedsInput(s) {
   if (!S.tabs.includes(s.sessionId)) S.tabs.push(s.sessionId);
   if (typeof ccmyAlert === 'function') ccmyAlert(s, '입력 대기');
   try {
-    const n = new Notification(`입력 대기: ${s.name}`, { body: s.job?.needs || s.job?.detail || '세션이 입력을 기다립니다', silent: false });
+    const n = new Notification(`입력 대기: ${s.name}`, { body: s.job?.needs || s.job?.detail || '세션이 입력을 기다립니다', silent: typeof ccmySoundOn === 'function' && ccmySoundOn() && LOOK.ccmy !== 'off' });
     n.onclick = () => { api.focusWindow(); openSession(s.sessionId); };
   } catch { /* notifications unavailable: the badge still shows */ }
 }

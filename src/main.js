@@ -6,6 +6,7 @@ const pty = require('node-pty');
 const data = require('./data');
 const chat = require('./chat');
 const ccmy = require('./ccmy');
+const ccmymem = require('./ccmymem');
 const appusage = require('./appusage'); // 사내 앱 사용 기록 (QuantumMate)
 
 data.setCacheDir(path.join(app.getPath('userData'), 'cache'));
@@ -232,6 +233,12 @@ ipcMain.handle('ccmy:send', (_e, { text, model, conv }) => ccmy.send(conv === 'a
 ipcMain.handle('ccmy:confirm', (_e, { id, ok }) => ccmy.confirm(id, ok));
 ipcMain.handle('ccmy:interrupt', () => ccmy.interrupt());
 ipcMain.handle('ccmy:close', (_e, conv) => ccmy.close(conv));
+// CCMy's memory folder (src/ccmymem.js): 지침 for 모양 › 기억, and the 작업 일지 line when a session finishes
+ipcMain.handle('ccmy:notes', () => ({ home: ccmymem.home(), notes: ccmymem.load() }));
+ipcMain.handle('ccmy:noteAdd', (_e, { text, scope }) => ccmymem.add(text, scope));
+ipcMain.handle('ccmy:noteDel', (_e, { text, scope }) => ccmymem.del(text, scope).length);
+ipcMain.handle('ccmy:journal', (_e, req) => ccmy.journal(req));
+ipcMain.handle('ccmy:openHome', () => { fs.mkdirSync(ccmymem.home(), { recursive: true }); return shell.openPath(ccmymem.home()); });
 
 // ---- live transcript tail (one watched file at a time) ----
 let tail = null; // { sessionId, file, offset, watcher, timer }

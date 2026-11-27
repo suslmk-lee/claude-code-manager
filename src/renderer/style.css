@@ -783,6 +783,8 @@ html .ccmy-fab:focus-visible { outline:2px solid var(--acc); outline-offset:5px;
 @keyframes ccmy-pulse { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(1.25); } }
 @keyframes ccmy-spin { to { transform:rotate(360deg); } }
 @keyframes ccmy-bob { 0%, 100% { transform:translateY(0) rotate(0); } 30% { transform:translateY(-2px) rotate(-4deg); } 70% { transform:translateY(1px) rotate(4deg); } }
+html .ccmy-fab.ring { animation:ccmy-ring 1.5s var(--ease-spring); } .ccmy-fab.ring::before { opacity:1; animation:ccmy-spin 1.5s linear; }
+@keyframes ccmy-ring { 0%, 100% { transform:scale(1); } 18% { transform:scale(1.7) rotate(-8deg); } 36% { transform:scale(1.15); } 54% { transform:scale(1.55) rotate(8deg); } 76% { transform:scale(.95); } }
 @keyframes ccmy-pop { from { opacity:0; transform:scale(.55); } }
 @media (prefers-reduced-motion: reduce) { .ccmy-fab::before, .ccmy-fab::after, .ccmy-fab .ccmy-ico, .ccmy-panel { animation:none !important; } }
 .ccmy-peek { position:absolute; right:62px; bottom:8px; max-width:340px; padding:8px 12px; border-radius:14px 14px 3px 14px; background:var(--raised); border:1px solid var(--line2); box-shadow:0 6px 18px rgba(0,0,0,.45); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; font-size:12.5px; }
@@ -818,7 +820,7 @@ html .ccmy-think button { all:unset; width:22px; height:22px; border-radius:50%;
 @keyframes ccmy-dot { 0%, 60%, 100% { transform:translateY(0); opacity:.45; } 30% { transform:translateY(-5px); opacity:1; } }
 @keyframes ccmy-shimmer { from { background-position:100% 0; } to { background-position:-150% 0; } }
 @media (prefers-reduced-motion: reduce) { .ccmy-think > .ccmy-ico, .ccmy-dots i, .ccmy-think-text { animation:none; } .ccmy-think-text { color:var(--dim); background:none; } }
-.ccmy-chips { display:flex; gap:6px; padding:0 16px 10px; overflow:hidden; } html #ccmy .ccmy-chips button { flex:none; font-size:11.5px; color:var(--dim); }
+.ccmy-chips { display:flex; gap:6px; padding:0 16px 10px; flex-wrap:wrap; } html #ccmy .ccmy-chips button { flex:none; font-size:11.5px; color:var(--dim); }
 .ccmy-ask { display:flex; gap:8px; align-items:flex-end; margin:0 14px 14px; padding:6px 6px 6px 16px; border-radius:22px; background:var(--panel); border:1px solid var(--line2); } .ccmy-ask:focus-within { border-color:color-mix(in srgb, var(--acc) 60%, var(--line2)); }
 html .ccmy-ask textarea { all:unset; flex:1; min-width:0; max-height:120px; padding:6px 0; font:inherit; font-size:13px; color:var(--fg); overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; cursor:text; } .ccmy-ask textarea::placeholder { color:var(--dim); opacity:.7; }
 html .ccmy-ask button { all:unset; flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(135deg, color-mix(in srgb, var(--acc) 75%, #fff), var(--acc)); color:#1a1210; font-weight:700; cursor:pointer; }
@@ -842,3 +844,7 @@ html #ccmy .ccmy-bulk { all:unset; align-self:stretch; text-align:center; paddin
 .ccmy-msg.note { align-self:center; max-width:100%; padding:2px 12px; border-radius:11px; background:none; border:1px dashed var(--line2); color:var(--dim); font-size:11.5px; text-align:center; }
 .ccmy-msg.alert.auto .ccmy-cap, .ccmy-card.auto .ccmy-tag { background:color-mix(in srgb, #5b8def 18%, transparent); color:color-mix(in srgb, #5b8def 70%, var(--fg)); }
 .ccmy-msg.confirm.auto, .ccmy-card.auto { border-color:color-mix(in srgb, #5b8def 45%, var(--line)); background:color-mix(in srgb, #5b8def 7%, var(--bg)); }
+/* 모양 › 기억: CCMy's kept notes */
+.ccmy-notes { display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+.ccmy-note { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; font-size:13px; } .ccmy-note > span:nth-child(2) { flex:1; overflow-wrap:anywhere; } .ccmy-note .ccmy-tag { flex:none; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ccmy-note-add { display:flex; gap:8px; margin:8px 0 4px; } .ccmy-note-add select { width:130px; flex:none; } .ccmy-note-add input { flex:1; }
