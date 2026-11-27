@@ -258,34 +258,43 @@ function watch(dir, opts, event, filter) {
 // Accelerators per platform. Off mac, menu accelerators fire before the page, so Ctrl+N/K/W (and the stock Edit
 // menu's Ctrl+C/V/…) would steal keys from the xterm terminal (^C interrupt, ^W/^K line editing): use Ctrl+Shift+… there.
 const ACC = isMac
-  ? { new: 'CmdOrCtrl+N', search: 'CmdOrCtrl+K', close: 'CmdOrCtrl+W', sub: (n) => `CmdOrCtrl+Shift+${n}` }
-  : { new: 'Ctrl+Shift+N', search: 'Ctrl+Shift+K', close: 'Ctrl+Shift+W', sub: (n) => `Ctrl+Alt+${n}` };
+  ? { new: 'CmdOrCtrl+N', search: 'CmdOrCtrl+K', close: 'CmdOrCtrl+W', sub: (n) => `CmdOrCtrl+Shift+${n}`, split: 'CmdOrCtrl+\\', swap: 'CmdOrCtrl+Shift+\\', layout: 'CmdOrCtrl+Alt+\\' }
+  : { new: 'Ctrl+Shift+N', search: 'Ctrl+Shift+K', close: 'Ctrl+Shift+W', sub: (n) => `Ctrl+Alt+${n}`, split: 'Ctrl+Shift+\\', swap: 'Ctrl+Alt+\\', layout: 'Ctrl+Alt+Shift+\\' }; // Ctrl+\ is SIGQUIT in a terminal
 // non-mac Edit menu: roles stay (items work) but registerAccelerator:false leaves the keys to Chromium / xterm
 const editMenu = isMac ? { role: 'editMenu' } : { label: '편집', submenu: ['undo', 'redo', 'separator', 'cut', 'copy', 'paste', 'selectAll'].map((r) => r === 'separator' ? { type: 'separator' } : { role: r, registerAccelerator: false }) };
 
 // App menu: keeps Edit (clipboard shortcuts) and adds tab shortcuts as accelerators, so they work even
 // while the embedded terminal has focus. The default menu's ⌘W (close window) is replaced by "탭 닫기".
+// The 탭 menu and the in-app 단축키 안내 (톱니 메뉴) are drawn from this one table: [group, label, accelerator, action, arg]
+const SHORTCUTS = [
+  ['세션 · 탭', '새 세션…', ACC.new, 'new'],
+  ['세션 · 탭', '세션 목록 · 대화 검색', ACC.search, 'search'],
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ['세션 · 탭', `${n}번째 탭`, `CmdOrCtrl+${n}`, 'tab', n]),
+  ['세션 · 탭', '마지막 탭', 'CmdOrCtrl+0', 'tab', 0],
+  ['세션 · 탭', '다음 탭', 'Ctrl+Tab', 'next'],
+  ['세션 · 탭', '이전 탭', 'Ctrl+Shift+Tab', 'prev'],
+  ['세션 · 탭', '탭 닫기 (세션은 유지)', ACC.close, 'close'],
+  ['나란히 보기', '나란히 보기 켜기/끄기', ACC.split, 'split'],
+  ['나란히 보기', '이전(왼쪽) 창으로 포커스', 'CmdOrCtrl+Alt+Left', 'splitFocus', 'left'],
+  ['나란히 보기', '다음(오른쪽) 창으로 포커스', 'CmdOrCtrl+Alt+Right', 'splitFocus', 'right'],
+  ['나란히 보기', '지금 창을 첫 번째 자리로 (2개면 좌우 바꾸기)', ACC.swap, 'splitSwap'],
+  ['나란히 보기', '배치 바꾸기 (3개: 긴 창 1 + 2 ↔ 세로 3열)', ACC.layout, 'splitLayout'],
+  ['세션 화면', '터미널', ACC.sub(1), 'sub', 'terminal'],
+  ['세션 화면', '대화', ACC.sub(2), 'sub', 'transcript'],
+  ['세션 화면', '통계', ACC.sub(3), 'sub', 'stats'],
+  ['세션 화면', '메모리', ACC.sub(4), 'sub', 'memory'],
+  ['세션 화면', '셸 패널 보이기/숨기기', 'Ctrl+`', 'shell'],
+];
+ipcMain.on('app:shortcuts', (e) => { e.returnValue = SHORTCUTS.map(([group, label, acc]) => ({ group, label, acc })); });
 function buildMenu() {
   const key = (action, arg) => () => send('shortcut', { action, arg });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(isMac ? [{ role: 'appMenu' }] : []),
     editMenu,
     { label: '탭', submenu: [
-      { label: '새 세션…', accelerator: ACC.new, click: key('new') },
-      { label: '세션 목록 · 대화 검색', accelerator: ACC.search, click: key('search') },
+      ...SHORTCUTS.flatMap(([group, label, accelerator, action, arg], i) => [...(i && SHORTCUTS[i - 1][0] !== group ? [{ type: 'separator' }] : []), { label, accelerator, click: key(action, arg) }]),
       { type: 'separator' },
-      ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ label: `${n}번째 탭`, accelerator: `CmdOrCtrl+${n}`, click: key('tab', n) })),
-      { label: '마지막 탭', accelerator: 'CmdOrCtrl+0', click: key('tab', 0) },
-      { label: '다음 탭', accelerator: 'Ctrl+Tab', click: key('next') },
-      { label: '이전 탭', accelerator: 'Ctrl+Shift+Tab', click: key('prev') },
-      { label: '탭 닫기 (세션은 유지)', accelerator: ACC.close, click: key('close') },
-      { type: 'separator' },
-      { label: '터미널', accelerator: ACC.sub(1), click: key('sub', 'terminal') },
-      { label: '대화', accelerator: ACC.sub(2), click: key('sub', 'transcript') },
-      { label: '통계', accelerator: ACC.sub(3), click: key('sub', 'stats') },
-      { label: '메모리', accelerator: ACC.sub(4), click: key('sub', 'memory') },
-      { type: 'separator' },
-      { label: '셸 패널 보이기/숨기기', accelerator: 'Ctrl+`', click: key('shell') },
+      { label: '단축키 안내', click: key('keys') },
     ] },
     { label: '보기', submenu: [{ role: 'reload', ...(isMac ? {} : { registerAccelerator: false }) /* Ctrl+R = shell history search */ }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
     { label: '윈도우', submenu: [{ role: 'minimize' }, ...(isMac ? [{ role: 'zoom' }, { type: 'separator' }, { role: 'front' }] : [])] },

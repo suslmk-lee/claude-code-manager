@@ -183,6 +183,15 @@ body.resizing { cursor:ns-resize; user-select:none; }
 .starting .spin { width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--acc); border-radius:50%; animation:ccm-spin .8s linear infinite; }
 @keyframes ccm-spin { to { transform:rotate(360deg); } }
 .term-box { flex:1; min-height:0; }
+/* 나란히 보기: two sessions' terminals side by side */
+.pane.term.split { display:grid; gap:6px; grid-auto-rows:minmax(0, 1fr); position:relative; overflow:hidden; } /* tracks come from S.sizes (inline) */
+.pane.term.split.lay-tile.n3 > .split-col:first-child { grid-row:span 2; } /* one tall pane + two stacked */
+.split-col { position:relative; min-width:0; min-height:0; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:6px; padding:0 4px 4px; overflow:hidden; }
+.split-col.on { border-color:var(--acc); } /* the active pane: header, shell and browser follow it */
+.split-tools { position:absolute; top:5px; right:6px; display:flex; gap:4px; }
+.split-layout { padding:0 6px; font-size:11px; }
+.split-layout { margin-left:auto; line-height:22px; }
+.tab .side { font-size:11px; color:var(--acc); margin-right:-2px; flex:none; }
 .term-box.local-clicks .xterm.enable-mouse-events { cursor:text; } /* clicks stay local: the pointer says the text is selectable */
 .term-bar { display:flex; gap:8px; align-items:center; padding:4px 6px; color:var(--dim); font-size:11px; }
 /* terminal look picker (theme gallery + font) */
@@ -721,3 +730,33 @@ dialog.glass::after { opacity:.5; }
 :is(.theme-row.glass.sel, .look-nav.glass.active)::before { background:linear-gradient(135deg, var(--acc), color-mix(in srgb, var(--acc) 35%, transparent) 50%, var(--acc)); }
 html[data-surface="brutal"] :is(.theme-row.glass.sel, .look-nav.glass.active) { outline:none; background:var(--fg); color:var(--bg); } html[data-surface="brutal"] .theme-row.glass.sel .theme-hint { color:color-mix(in srgb, var(--bg) 70%, var(--fg)); }
 html[data-surface="brutal"] dialog.glass { box-shadow:8px 8px 0 var(--fg); }
+/* 단축키 안내 */
+#dlg-keys form { min-width:420px; } #keys-body { max-height:62vh; overflow:auto; padding:0 6px 0 2px; outline:none; }
+#keys-body h4 { margin:14px 0 6px; font-size:11px; color:var(--dim); font-weight:600; }
+.keys-grid { display:grid; grid-template-columns:1fr auto; gap:6px 18px; align-items:center; font-size:13px; }
+.keys-grid kbd { font:inherit; font-size:12px; padding:1px 7px; border:1px solid var(--line); border-radius:5px; background:var(--panel); color:var(--fg); white-space:nowrap; justify-self:end; }
+.tabs .split-layout + .shell-toggle { margin-left:0; }
+.split-grip { position:absolute; z-index:3; border-radius:3px; }
+.split-grip.v { width:8px; cursor:col-resize; } .split-grip.h { height:8px; cursor:row-resize; }
+.split-grip:hover, body.resizing .split-grip { background:var(--acc); opacity:.45; }
+body.resizing.col { cursor:col-resize; } body.resizing.row { cursor:row-resize; }
+.split-col.picker { padding:8px; gap:8px; border-style:dashed; }
+.split-col.picker input { width:calc(100% - 34px); }
+.pick-list { flex:1; min-height:0; overflow:auto; }
+.pick-list h4 { margin:10px 4px 4px; font-size:11px; color:var(--dim); font-weight:600; }
+.pick-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px; }
+.pick-row:hover { background:color-mix(in srgb, var(--acc) 14%, transparent); }
+.pick-row .glyph { margin:0; } .pick-row .name { flex:none; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pick-row .path { flex:1; min-width:0; color:var(--dim); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tabs .split-layout + .split-layout { margin-left:0; }
+.split-col > .shell-panel { min-height:80px; margin:0 -4px -4px; max-height:calc(100% - 100px); }
+/* icon buttons without a rim (pane tools, attach/detach): a soft fill on hover, accent when on */
+html .split-tools button, html .term-bar button.ico, html .tabs button.ico { all:unset; width:24px; height:22px; display:grid; place-items:center; border-radius:5px; color:var(--dim); cursor:pointer; flex:none; }
+html .split-tools button:hover, html .term-bar button.ico:hover, html .tabs button.ico:hover { background:color-mix(in srgb, var(--fg) 12%, transparent); color:var(--fg); }
+html .split-tools button.toggled { color:var(--acc); background:color-mix(in srgb, var(--acc) 16%, transparent); }
+html .term-bar button.ico:disabled { opacity:.4; cursor:default; }
+html .split-tools button svg, html .term-bar button.ico svg, html .tabs button.ico svg { width:14px; height:14px; opacity:1; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.split-tools { gap:2px; }
+html .tabs button.ico { width:28px; height:26px; } html .tabs button.ico svg { width:15px; height:15px; }
+.tabs .split-layout { margin-left:auto; } .tabs .split-layout + .split-layout { margin-left:0; }
+html .tabs button.ico.split-layout { margin-left:auto; } html .tabs button.ico.split-layout + .split-layout { margin-left:0; }

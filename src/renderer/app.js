@@ -38,7 +38,7 @@ const shortPath = (p = '') => {
 };
 
 const S = {
-  view: 'sessions', sessions: [], local: [], sel: null, tab: 'terminal', tabs: [], booted: false, unseen: new Set(),
+  view: 'sessions', sessions: [], local: [], sel: null, group: null, layout: 'tile', sizes: { x: 0.5, y: 0.5, c: [1 / 3, 1 / 3] }, paneShells: new Set(), tab: 'terminal', tabs: [], booted: false, unseen: new Set(),
   profiles: [], terms: new Map(), shells: new Map(), shellOpen: (() => { try { return localStorage.getItem('shellOpen') === '1'; } catch { return false; } })(), memory: null, projects: [], memSel: null, memFilter: '', memProject: '',
 };
 const cur = () => S.sessions.find((s) => s.sessionId === S.sel) || S.local.find((s) => s.sessionId === S.sel);
@@ -79,6 +79,10 @@ async function loadSessions() {
     const saved = loadTabs();
     S.tabs = saved?.tabs || S.sessions.filter((s) => s.live).map((s) => s.sessionId);
     if (saved?.sel) S.sel = saved.sel;
+    { const g = saved?.group || saved?.pair; S.group = Array.isArray(g) && g.length >= 2 && g.length <= 4 ? g : null; }
+    if (saved?.layout === 'cols') S.layout = 'cols';
+    if (Array.isArray(saved?.paneShells)) S.paneShells = new Set(saved.paneShells);
+    { const z = saved?.sizes, ok = (v) => v > 0.1 && v < 0.9; if (z && ok(z.x) && ok(z.y) && Array.isArray(z.c) && ok(z.c[0]) && ok(z.c[1]) && ok(1 - z.c[0] - z.c[1])) S.sizes = { x: z.x, y: z.y, c: [z.c[0], z.c[1]] }; }
   }
   trackNeedsInput();
   const selBefore = S.sel;
@@ -86,6 +90,7 @@ async function loadSessions() {
   S.local =S.local.filter((l) => !S.sessions.some((s) => s.sessionId === l.sessionId)); // a new chat's placeholder gives way to the real session
   S.tabs = S.tabs.filter((id) => S.sessions.some((s) => s.sessionId === id) || S.local.some((s) => s.sessionId === id));
   if (!S.tabs.includes(S.sel)) S.sel = S.tabs[0] || null;
+  if (S.group) { S.group = [...new Set(S.group)].filter((id) => S.tabs.includes(id)); if (S.group.length < 2) S.group = null; }
   renderSessionList();
   renderTabs();
   const head = $('#detail-head'), s = cur();
@@ -110,6 +115,8 @@ function followContinuation(oldId, newId) {
   if (h) { S.shells.delete(oldId); if (S.shells.has(newId)) { if (h.ptyId) api.ptyKill(h.ptyId); h.term.dispose(); } else S.shells.set(newId, h); }
   if (S.tabs.includes(newId)) S.tabs.splice(i, 1); else S.tabs[i] = newId;
   if (S.sel === oldId) S.sel = newId;
+  if (S.group) S.group = S.group.map((id) => (id === oldId ? newId : id));
+  if (S.paneShells.delete(oldId)) S.paneShells.add(newId);
   saveTabs();
 }
 // ---------- needs-input: notify on the transition, badge until the tab is opened ----------
@@ -119,7 +126,28 @@ const needsInput = (s) => !!(s.job?.needs || s.state === 'blocked');
 // A stopped session keeps the job's last state (done / working) so a hollow ring still tells how it was left.
 const activity = (s) => (s.job?.needs || s.state === 'blocked') ? 'blocked' : s.live ? (s.status === 'busy' ? 'working' : 'idle') : (s.state || s.status || '');
 let prevNeeds = null; // null until the first load, so sessions already waiting at startup do not fire
+// 작업 완료 알림 (모양 › 알림): a session that worked for a while and is now idle/done. Short turns (< 10 s) and the session
+// on screen in the focused window stay quiet; needs-input has its own notification above.
+const workingSince = new Map(); // sessionId → when it was first seen working
+let doneBooted = false;
+function trackDone() {
+  for (const s of S.sessions) {
+    const a = activity(s), id = s.sessionId;
+    if (a === 'working') { if (!workingSince.has(id)) workingSince.set(id, Date.now()); continue; }
+    const since = workingSince.get(id);
+    workingSince.delete(id);
+    if (!since || !doneBooted || a === 'blocked' || Date.now() - since < 10000) continue;
+    if (typeof LOOK !== 'undefined' && LOOK.doneNotify === 'off') continue;
+    if (document.hasFocus() && S.view === 'sessions' && (id === S.sel || (groupShown() && S.group.includes(id)))) continue;
+    try {
+      const n = new Notification(`작업 완료: ${s.name}`, { body: s.job?.detail || '세션이 작업을 마쳤습니다', silent: false });
+      n.onclick = () => { api.focusWindow(); openSession(id); };
+    } catch { /* notifications unavailable */ }
+  }
+  doneBooted = true;
+}
 function trackNeedsInput() {
+  trackDone();
   const now = new Set(S.sessions.filter(needsInput).map((s) => s.sessionId));
   if (prevNeeds) for (const id of now) if (!prevNeeds.has(id)) notifyNeedsInput(S.sessions.find((s) => s.sessionId === id));
   for (const id of [...S.unseen]) if (!now.has(id)) S.unseen.delete(id);
@@ -155,7 +183,7 @@ function renderVersionBar() {
 
 // open tabs, their order and the selected one persist across restarts
 const loadTabs = () => { try { return JSON.parse(localStorage.getItem('openTabs')); } catch { return null; } };
-const saveTabs = () => { if (S.booted) try { localStorage.setItem('openTabs', JSON.stringify({ tabs: S.tabs, sel: S.sel })); } catch { /* fine */ } };
+const saveTabs = () => { if (S.booted) try { localStorage.setItem('openTabs', JSON.stringify({ tabs: S.tabs, sel: S.sel, group: S.group, layout: S.layout, sizes: S.sizes, paneShells: [...S.paneShells] })); } catch { /* fine */ } };
 function renderTabs() {
   { const seen = new Set(); S.tabs = S.tabs.filter((id) => !seen.has(id) && seen.add(id)); } // one tab per session, whatever path added it
   saveTabs();
@@ -163,7 +191,7 @@ function renderTabs() {
   $('#tabs').replaceChildren(...S.tabs.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean).map((s) => {
     const st = activity(s);
     const n = S.tabs.indexOf(s.sessionId) + 1;
-    const t = el('div', { class: 'tab glass' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : ''), draggable: 'true',
+    const t = el('div', { class: 'tab glass' + (s.sessionId === S.sel && S.view === 'sessions' ? ' active' : '') + (S.group?.includes(s.sessionId) ? ' paired' : ''), draggable: 'true',
       // a cut-off name drifts to show the rest while hovered
       onmouseenter: (e) => { const l = e.currentTarget.querySelector('.label'); const over = l.scrollWidth - l.clientWidth; if (over > 4) { l.style.setProperty('--shift', `-${over}px`); l.style.setProperty('--dur', `${Math.max(2.5, over / 30)}s`); l.classList.add('marquee'); } else l.classList.remove('marquee'); }, 'data-tip': `${n <= 9 ? `${kbd('⌘' + n)} · ` : ''}${shortPath(s.cwd)}\n${s.job?.needs || s.job?.detail || ''}`.trim(), onclick: () => openSession(s.sessionId), oncontextmenu: (e) => showCtx(e, s),
       // drag to reorder: native HTML5 DnD; the half of the target the pointer is over decides before/after
@@ -173,6 +201,7 @@ function renderTabs() {
       ondrop: (e) => { e.preventDefault(); e.stopPropagation(); moveTab(S.dragTab, s.sessionId, t.classList.contains('drop-after')); },
       ondragend: () => { S.dragTab = null; renderTabs(); } },
       el('span', { class: `glyph ${st} ${s.live || s.local ? 'live' : 'off'}` }),
+      S.group?.includes(s.sessionId) ? el('span', { class: 'side', text: '①②③④'[S.group.indexOf(s.sessionId)], 'data-tip': `나란히 보기의 ${S.group.indexOf(s.sessionId) + 1}번 창` }) : null,
       el('span', { class: 'label' }, el('span', { class: 'txt', text: s.name })), // inner span: the marquee moves it with transform, so the tab's width never follows
       profileBadge(s),
       S.unseen.has(s.sessionId) ? el('span', { class: 'pill', text: '입력' }) : null,
@@ -207,6 +236,7 @@ function updateTabArrows() {
 }
 function openSession(id) {
   if (!S.tabs.includes(id)) S.tabs.push(id);
+  S.picker = false;
   S.sel = id;
   S.unseen.delete(id);
   closeFlyout();
@@ -220,10 +250,109 @@ function closeTab(id) {
   const h = S.shells.get(id);
   if (h) { if (h.ptyId) api.ptyKill(h.ptyId); h.term.dispose(); S.shells.delete(id); }
   S.tabs = S.tabs.filter((x) => x !== id);
+  S.paneShells.delete(id);
   S.local = S.local.filter((s) => s.sessionId !== id);
   if (S.sel === id) S.sel = S.tabs[S.tabs.length - 1] || null;
+  if (S.group?.includes(id)) { S.group = S.group.filter((x) => x !== id); if (S.group.length < 2) S.group = null; }
   renderSessionList(); renderTabs(); renderDetail();
 }
+// ---------- 나란히 보기: 2 ~ 4 sessions as a fixed group, in order (terminal sub-tab only) ----------
+// The group shows whenever one of its tabs is selected, always in the same order; the selected one is the active pane
+// (header, sub-tabs, shell and browser follow it). Any other tab shows alone; coming back to a grouped tab brings the group back.
+// Layouts: 2 → side by side, 4 → 2×2, 3 → S.layout 'tile' (one tall pane + two stacked) or 'cols' (three columns).
+// Borders drag (S.sizes: x / y = the column / row split, c = the first two of three columns); a double click evens them out.
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const cols3 = (n) => n === 3 && S.layout === 'cols';
+function applySplitSizes(pane, n) {
+  const z = S.sizes, fr = (...f) => f.map((v) => `minmax(0, ${v}fr)`).join(' ');
+  pane.style.gridTemplateColumns = cols3(n) ? fr(z.c[0], z.c[1], 1 - z.c[0] - z.c[1]) : fr(z.x, 1 - z.x);
+  pane.style.gridTemplateRows = n > 2 && !cols3(n) ? fr(z.y, 1 - z.y) : '';
+}
+function placeGrips(pane) { // each grip sits on the gap between the two panes it divides
+  const k = [...pane.querySelectorAll('.split-col')].map((c) => c.getBoundingClientRect()), p = pane.getBoundingClientRect(), n = k.length;
+  for (const g of pane.querySelectorAll('.split-grip')) {
+    const key = g.dataset.k;
+    if (key === 'y') { const [a, b] = n === 3 ? [k[1], k[2]] : [k[0], k[2]]; Object.assign(g.style, { top: `${(a.bottom + b.top) / 2 - p.top - 4}px`, left: `${(n === 3 ? a.left : k[0].left) - p.left}px`, width: `${n === 3 ? a.width : k[1].right - k[0].left}px` }); }
+    else { const [a, b] = key === 'c1' ? [k[1], k[2]] : [k[0], k[1]]; Object.assign(g.style, { left: `${(a.right + b.left) / 2 - p.left - 4}px`, top: `${k[0].top - p.top}px`, height: `${k[n - 1].bottom - k[0].top}px` }); }
+  }
+}
+function splitGrip(pane, key, n) {
+  const g = el('div', { class: 'split-grip ' + (key === 'y' ? 'h' : 'v'), 'data-k': key, 'data-tip': '끌어서 크기 조절 · 두 번 눌러 균등하게' });
+  const set = (fx, fy) => {
+    const z = S.sizes;
+    if (key === 'x') z.x = clamp(fx, 0.2, 0.8); else if (key === 'y') z.y = clamp(fy, 0.2, 0.8);
+    else if (key === 'c0') { const sum = z.c[0] + z.c[1]; z.c[0] = clamp(fx, 0.15, sum - 0.15); z.c[1] = sum - z.c[0]; } // the middle pane gives or takes
+    else z.c[1] = clamp(fx - z.c[0], 0.15, 0.85 - z.c[0]);
+    applySplitSizes(pane, n); placeGrips(pane);
+  };
+  g.onmousedown = (e) => {
+    e.preventDefault();
+    const r = pane.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pane).paddingLeft) || 0;
+    document.body.classList.add('resizing', key === 'y' ? 'row' : 'col');
+    const move = (ev) => set((ev.clientX - r.left - pad) / (r.width - 2 * pad), (ev.clientY - r.top - pad) / (r.height - 2 * pad));
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing', 'row', 'col'); saveTabs(); };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  };
+  g.ondblclick = () => { if (key === 'x' || key === 'y') set(0.5, 0.5); else { S.sizes.c = [1 / 3, 1 / 3]; applySplitSizes(pane, n); placeGrips(pane); } saveTabs(); };
+  return g;
+}
+const SPLIT_MAX = 4;
+const groupShown = () => !!(S.group && S.group.includes(S.sel) && S.view === 'sessions' && S.tab === 'terminal');
+const groupSessions = () => { if (!S.group || !S.group.includes(S.sel)) return null; const all = [...S.local, ...S.sessions], g = S.group.map((id) => all.find((s) => s.sessionId === id)).filter(Boolean); return g.length >= 2 ? g : null; };
+function setGroup(ids) { // null or fewer than two ends it
+  S.group = ids && ids.length >= 2 ? ids.slice(0, SPLIT_MAX) : null;
+  if (S.group) { for (const id of S.group) if (!S.tabs.includes(id)) S.tabs.push(id); if (!S.group.includes(S.sel)) S.sel = S.group[S.group.length - 1]; S.tab = 'terminal'; if (S.view !== 'sessions') setView('sessions'); }
+  renderTabs(); renderDetail();
+}
+const addSplit = (id) => setGroup(S.group ? [...S.group.filter((x) => x !== id), id] : [S.sel, id]); // joins as the last pane
+const dropSplit = (id) => setGroup(S.group.filter((x) => x !== id));
+// ⌘\ or the ＋ 창 button opens an empty pane with a picker: the user chooses which tab or session goes there
+function toggleSplit() {
+  if (S.picker) { S.picker = false; return renderDetail(); }
+  if (S.group) return setGroup(null);
+  if (cur()) openPicker();
+}
+function openPicker() { S.picker = true; S.tab = 'terminal'; if (S.view !== 'sessions') setView('sessions'); renderDetail(); }
+function pickSplit(id) { S.picker = false; const g = S.group?.includes(S.sel) ? [...S.group, id] : [S.sel, id]; S.sel = id; setGroup(g); } // the new pane becomes the active one
+function pickerPane(taken) {
+  const all = [...S.local, ...S.sessions].filter((x) => !taken.includes(x.sessionId) && !x.starting);
+  const list = el('div', { class: 'pick-list' });
+  const row = (x) => el('div', { class: 'pick-row', onclick: () => pickSplit(x.sessionId) },
+    el('span', { class: `glyph ${activity(x)} ${x.live || x.local ? 'live' : 'off'}` }), el('span', { class: 'name', text: x.name }), el('span', { class: 'path', text: shortPath(x.cwd) }));
+  const draw = (q = '') => {
+    const hit = all.filter((x) => !q || `${x.name} ${x.cwd}`.toLowerCase().includes(q.toLowerCase()));
+    const open = S.tabs.map((id) => hit.find((x) => x.sessionId === id)).filter(Boolean), rest = hit.filter((x) => !S.tabs.includes(x.sessionId)).slice(0, 60);
+    list.replaceChildren(...(open.length ? [el('h4', { text: '열린 탭' }), ...open.map(row)] : []), ...(rest.length ? [el('h4', { text: '다른 세션' }), ...rest.map(row)] : []),
+      ...(!open.length && !rest.length ? [el('div', { class: 'empty', text: '고를 세션이 없습니다' })] : []));
+  };
+  const input = el('input', { placeholder: '이 창에 열 세션 검색…', oninput: () => draw(input.value),
+    onkeydown: (e) => { if (e.key === 'Escape') { e.stopPropagation(); toggleSplit(); } else if (e.key === 'Enter') list.querySelector('.pick-row')?.click(); } });
+  draw();
+  requestAnimationFrame(() => input.focus());
+  return el('div', { class: 'split-col picker' }, input, list, el('div', { class: 'split-tools' }, el('button', { 'data-tip': '취소 (Esc)', onclick: toggleSplit }, svgIcon(ICON.x))));
+}
+// the active pane moves to the first place (the tall one in the 1+2 tile); already first → it trades with the second
+function swapSplit(id = S.sel) {
+  if (!S.group?.includes(id)) return;
+  const rest = S.group.filter((x) => x !== id);
+  S.group = S.group[0] === id ? [rest[0], id, ...rest.slice(1)] : [id, ...rest];
+  renderTabs(); renderDetail();
+}
+function toggleLayout() { S.layout = S.layout === 'cols' ? 'tile' : 'cols'; saveTabs(); renderDetail(); }
+// the active side follows focus (a click into the other terminal, or ⌘⌥←/→) without rebuilding the pane
+function activatePane(id, refocus = true) { // refocus false: the click already put focus where the user wants it (terminal or its shell)
+  const t = S.terms.get(id);
+  if (id === S.sel || !S.group?.includes(id)) { if (refocus) t?.term.focus(); return; }
+  S.sel = id; S.unseen.delete(id);
+  renderTabs(); renderSessionList();
+  for (const c of document.querySelectorAll('.split-col')) c.classList.toggle('on', c.dataset.id === id);
+  const head = $('#detail-head'), s = cur();
+  if (head && s) head.replaceWith(buildHead(s));
+  renderShellPanel(); if (typeof syncBrowserPane === 'function') syncBrowserPane(s);
+  $('#session-detail .shell-toggle')?.replaceWith(shellToggleBtn());
+  if (refocus) t?.term.focus();
+}
+function focusSplit(dir) { if (!groupShown()) return; const n = S.group.length, i = S.group.indexOf(S.sel); activatePane(S.group[(i + (dir === 'right' ? 1 : n - 1)) % n]); } // wraps around
 function renderSessionList() {
   const list = $('#session-list');
   list.replaceChildren();
@@ -337,7 +466,30 @@ function renderDetail() {
   sec.replaceChildren(el('div', { class: 'head-wrap' }, el('div', { class: 'head-strip' }, el('i')), head), tabs, pane); // head is an overlay: hidden until the strip is hovered, so the pane never reflows
   renderShellPanel();
   if (typeof syncBrowserPane === 'function') syncBrowserPane(s);
-  if (S.tab === 'terminal') showTerminal(s, pane);
+  const group = S.tab === 'terminal' ? groupSessions() : null;
+  const picking = S.tab === 'terminal' && S.picker && (group?.length || 1) < SPLIT_MAX;
+  if (!picking) S.picker = false;
+  if (group || picking) {
+    const shown = group || [s], n = shown.length + (picking ? 1 : 0);
+    pane.classList.add('split', `n${n}`, cols3(n) ? 'lay-cols' : 'lay-tile');
+    applySplitSizes(pane, n);
+    if (n === 3) tabs.insertBefore(el('button', { class: 'split-layout ico', 'data-tip': `배치 바꾸기 · 지금: ${S.layout === 'cols' ? '긴 창 3열' : '긴 창 1 + 짧은 창 2'}`, onclick: toggleLayout }, svgIcon(S.layout === 'cols' ? ICON.cols : ICON.tile)), tabs.lastChild);
+    if (group && !picking && n < SPLIT_MAX) tabs.insertBefore(el('button', { class: 'split-layout ico', 'data-tip': '창 추가 · 빈 창을 열고 세션을 골라 넣기', onclick: openPicker }, svgIcon(ICON.addPane)), tabs.lastChild);
+    shown.forEach((x, i) => {
+      const col = el('div', { class: 'split-col' + (x.sessionId === S.sel ? ' on' : ''), 'data-id': x.sessionId, onfocusin: () => { if (x.sessionId !== S.sel) activatePane(x.sessionId, false); } });
+      pane.append(col);
+      showTerminal(x, col, x.sessionId === S.sel && !picking);
+      if (group && S.paneShells.has(x.sessionId)) { const f = S.focusShell === x.sessionId; col.append(shellPanel(x, col, { key: 'shellHPane', def: 170, min: 80, room: 100, focus: f })); }
+      if (group) col.append(el('div', { class: 'split-tools' },
+        el('button', { class: S.paneShells.has(x.sessionId) ? 'toggled' : '', 'data-tip': '이 창의 셸 열기/숨기기 (⌃`)', onclick: () => toggleShell(x.sessionId) }, svgIcon(ICON.shell)),
+        i ? el('button', { 'data-tip': '첫 번째 자리로 (긴 창)', onclick: () => swapSplit(x.sessionId) }, svgIcon(ICON.first)) : null,
+        el('button', { 'data-tip': '나란히 보기에서 빼기 (탭은 그대로)', onclick: () => dropSplit(x.sessionId) }, svgIcon(ICON.x))));
+    });
+    S.focusShell = null;
+    if (picking) pane.append(pickerPane(shown.map((x) => x.sessionId)));
+    pane.append(...(cols3(n) ? ['c0', 'c1'] : n > 2 ? ['x', 'y'] : ['x']).map((k) => splitGrip(pane, k, n)));
+    new ResizeObserver(() => pane.isConnected && placeGrips(pane)).observe(pane);
+  } else if (S.tab === 'terminal') showTerminal(s, pane);
   else if (S.tab === 'transcript') showTranscript(s, pane);
   else if (S.tab === 'stats') showStats(s, pane);
   else showSessionMemory(s, pane);
@@ -395,10 +547,10 @@ function newXterm({ localClicks } = {}) {
 function createTerm(s) {
   const { term, fit, box, syncSelection } = newXterm({ localClicks: clicksLocal });
   const status = el('span', { text: '연결 안 됨' });
-  const btn = el('button', { onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
+  const btn = el('button', { class: 'ico', onclick: () => { t.detached = !!t.ptyId; return t.ptyId ? api.ptyKill(t.ptyId) : attach(s); } }); // detached = the user let go: no auto re-attach
   const t = { term, fit, box, btn, status, syncSelection, ptyId: null, bar: el('div', { class: 'term-bar' }, btn, status) }; // 모양 lives in the gear menu
   // one button toggles: detach only ends the `claude attach` client, the background session keeps running
-  t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; btn.textContent = t.ptyId ? (live ? '떼기 (detach)' : '닫기') : (live ? '붙기 (attach)' : '이어가기 (resume)'); }; // fresh state: s is the object from when the tab was built
+  t.setLabel = () => { const live = (S.sessions.find((x) => x.sessionId === s.sessionId) || s).live; const [icon, tip] = t.ptyId ? (live ? [ICON.detach, '떼기 (detach) · 세션은 계속 실행'] : [ICON.stop, '터미널 닫기']) : (live ? [ICON.attach, '붙기 (attach)'] : [ICON.play, '이어가기 (resume)']); btn.replaceChildren(svgIcon(icon)); btn.dataset.tip = tip; }; // fresh state: s is the object from when the tab was built
   t.setLabel();
   // Claude Code draws attached background sessions with its fullscreen renderer (alt screen, own scrolling; not switchable):
   // after a wheel-up, auto-follow pauses and typing no longer brings the prompt back into view. So the first keystroke after
@@ -456,13 +608,13 @@ function resyncViewport(term) {
   term.scrollLines(y > 0 ? -1 : 1);
   term.scrollToLine(y);
 }
-function showTerminal(s, pane) {
+function showTerminal(s, pane, focus = true) {
   if (s.starting) { pane.append(el('div', { class: 'starting' }, el('span', { class: 'spin' }), el('span', { text: `"${s.name}" 세션을 시작하는 중… (claude --bg${s.profile !== 'default' ? ` · ${s.profile}` : ''})` }))); return; }
   let t = S.terms.get(s.sessionId);
   if (!t) { t = createTerm(s); S.terms.set(s.sessionId, t); }
   pane.append(t.bar, t.box);
   requestAnimationFrame(() => {
-    t.fit.fit(); resyncViewport(t.term); t.term.focus();
+    t.fit.fit(); resyncViewport(t.term); if (focus) t.term.focus();
     if (t.ptyId) return;
     if (!attachArgs(s) && (s.live || (typeof CH !== 'undefined' && CH.has(s.sessionId)))) { if (!t.logMode) startLogMode(s, t); else api.watchTranscript(s.sessionId); }
     else if (s.local || s.live) attach(s);
@@ -480,7 +632,7 @@ async function attach(s) {
   t.btn.disabled = false;
   t.setLabel();
   t.status.textContent = 'claude ' + args.join(' ');
-  t.term.focus();
+  if (s.sessionId === S.sel) t.term.focus(); // the other side of a pair attaches without taking focus
 }
 // ---------- plain shell in the session's working folder (its own pty; nothing goes into the conversation) ----------
 // A session checked out under <project>/.claude/worktrees/<name> still gets its shell at <project> (user preference);
@@ -492,64 +644,89 @@ const shq = (p) => `'${String(p).replace(/'/g, `'\\''`)}'`;
 function createShell(s) {
   const { term, fit, box } = newXterm();
   const status = el('span');
-  const btn = el('button', { onclick: () => (h.ptyId ? api.ptyKill(h.ptyId) : openShell(s)) });
-  const hide = el('button', { text: '숨기기', 'data-tip': '패널 숨기기 (⌃`) · 셸은 계속 실행', onclick: toggleShell });
+  const btn = el('button', { class: 'ico', onclick: () => (h.ptyId ? api.ptyKill(h.ptyId) : openShell(s)) });
+  const hide = el('button', { class: 'ico', 'data-tip': '숨기기 (⌃`) · 셸은 계속 실행', onclick: () => toggleShell(s.sessionId) }, svgIcon(ICON.down));
   const wt = WORKTREE_RE.test(sessionDir(s) || '') ? sessionDir(s) : null;
-  const cdBtn = wt && el('button', { 'data-tip': `세션은 워크트리에서 작업 중: ${shortPath(wt)}`, onclick: () => { if (!h.ptyId) return; h.atWorktree = !h.atWorktree; api.ptyWrite(h.ptyId, `cd ${shq(h.atWorktree ? wt : shellCwd(s))}\r`); cdBtn.textContent = h.atWorktree ? '루트로 cd' : '워크트리로 cd'; h.term.focus(); } });
-  if (cdBtn) cdBtn.textContent = '워크트리로 cd';
+  const cdBtn = wt && el('button', { class: 'ico', onclick: () => { if (!h.ptyId) return; h.atWorktree = !h.atWorktree; api.ptyWrite(h.ptyId, `cd ${shq(h.atWorktree ? wt : shellCwd(s))}\r`); h.setCd(); h.term.focus(); } });
   const h = { term, fit, box, btn, status, ptyId: null, exited: false, atWorktree: false, bar: el('div', { class: 'term-bar' }, el('b', { class: 'shell-title', text: '셸' }), btn, cdBtn, status, hide) };
-  h.setLabel = () => { btn.textContent = h.ptyId ? '닫기' : '다시 열기'; };
+  h.setLabel = () => { btn.replaceChildren(svgIcon(h.ptyId ? ICON.stop : ICON.play)); btn.dataset.tip = h.ptyId ? '셸 닫기' : '셸 다시 열기'; };
+  h.setCd = () => { if (!cdBtn) return; cdBtn.replaceChildren(svgIcon(h.atWorktree ? ICON.folder : ICON.branch)); cdBtn.dataset.tip = h.atWorktree ? '프로젝트 루트로 cd' : `워크트리로 cd · 세션은 여기서 작업 중: ${shortPath(wt)}`; }; // the icon shows where a click goes
+  h.setCd();
   h.setLabel();
   term.onData((d) => h.ptyId && api.ptyWrite(h.ptyId, d));
   term.onResize(({ cols, rows }) => h.ptyId && api.ptyResize(h.ptyId, cols, rows));
   return h;
 }
-async function openShell(s) {
+async function openShell(s, focus = true) {
   const h = S.shells.get(s.sessionId);
   if (!h || h.ptyId) return;
-  if (h.exited) { h.exited = false; h.term.reset(); h.atWorktree = false; const b = h.bar.querySelector('button:nth-child(3)'); if (b && /cd$/.test(b.textContent)) b.textContent = '워크트리로 cd'; }
+  if (h.exited) { h.exited = false; h.term.reset(); h.atWorktree = false; h.setCd(); }
   h.fit.fit();
   h.btn.disabled = true;
   h.ptyId = await api.ptyOpen({ shell: true, cwd: shellCwd(s), cols: h.term.cols, rows: h.term.rows, profile: s.profile });
   h.btn.disabled = false;
   h.setLabel();
   h.status.textContent = `셸 · ${shortPath(shellCwd(s))} · 이 세션의 대화에는 기록되지 않습니다`;
-  h.term.focus();
+  if (focus) h.term.focus();
 }
 // Bottom panel (VS Code style): one shell per session tab, shown under whatever sub-tab is open; hiding keeps the pty.
+const ICON = { // 24×24 stroke icons for the terminal bar and the pane tools
+  shell: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10l3 2-3 2M12.5 15H17"/>',
+  first: '<path d="M5 5v14M19 12H9M13 7l-5 5 5 5"/>', x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  attach: '<path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
+  detach: '<path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/><path d="M4 4l16 16"/>', // the link, struck through
+  down: '<path d="M6 9.5l6 6 6-6"/>', folder: '<path d="M3.5 8a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v6.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+  branch: '<circle cx="7" cy="6" r="2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="8" r="2"/><path d="M7 8v8M17 10c0 3.5-5 3-9 5"/>',
+  addPane: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M12 9v6M9 12h6"/>',
+  tile: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M12 5v14M12 12h9"/>', cols: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M9 5v14M15 5v14"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z"/>', stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
+};
 const svgIcon = (d) => { const w = document.createElement('span'); w.innerHTML = `<svg viewBox="0 0 24 24">${d}</svg>`; return w.firstChild; };
-const shellToggleBtn = () => el('button', { class: 'shell-toggle' + (S.shellOpen ? ' active' : ''), 'data-tip': `하단 셸 패널 ${S.shellOpen ? '숨기기' : '열기'} (⌃\`) · 세션 폴더의 zsh, 대화에는 기록되지 않음`, onclick: toggleShell },
-  svgIcon('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10l3 2-3 2M12.5 15H17"/>'), `셸 ${S.shellOpen ? '▾' : '▴'}`);
-const loadShellH = () => { try { return Math.max(120, Number(localStorage.getItem('shellH')) || 260); } catch { return 260; } };
-function toggleShell() {
+// In 나란히 보기 each pane has its own shell under its terminal (S.paneShells, toggled per pane); the bottom panel is for a single session.
+const shellOn = () => (groupShown() ? S.paneShells.has(S.sel) : S.shellOpen);
+const shellToggleBtn = () => el('button', { class: 'shell-toggle' + (shellOn() ? ' active' : ''), 'data-tip': `${groupShown() ? '이 창의 셸' : '하단 셸 패널'} ${shellOn() ? '숨기기' : '열기'} (⌃\`) · 세션 폴더의 zsh, 대화에는 기록되지 않음`, onclick: () => toggleShell() },
+  svgIcon(ICON.shell), `셸 ${shellOn() ? '▾' : '▴'}`);
+function toggleShell(id = S.sel) {
+  if (groupShown() && S.group.includes(id)) { // this pane's shell only
+    const on = !S.paneShells.delete(id);
+    if (on) { S.paneShells.add(id); S.focusShell = id; }
+    if (id !== S.sel) { S.sel = id; renderTabs(); }
+    saveTabs(); renderDetail();
+    return;
+  }
   S.shellOpen = !S.shellOpen;
   try { localStorage.setItem('shellOpen', S.shellOpen ? '1' : ''); } catch { /* fine */ }
   $('#session-detail .shell-toggle')?.replaceWith(shellToggleBtn());
   renderShellPanel();
   if (!S.shellOpen) S.terms.get(S.sel)?.term.focus();
 }
-function renderShellPanel() {
-  const sec = $('#session-detail'), s = cur(), old = sec.querySelector('.shell-panel');
-  if (!S.shellOpen || !s || S.view !== 'sessions') { old?.remove(); return; }
+// a session's shell as a panel with a draggable top edge; host = what it sits in (the detail section, or one pane of a group)
+function shellPanel(s, host, { key = 'shellH', def = 260, min = 120, room = 160, focus = true } = {}) {
   let h = S.shells.get(s.sessionId);
   if (!h) { h = createShell(s); S.shells.set(s.sessionId, h); }
-  if (old?.dataset.id === s.sessionId) return;
-  old?.remove();
-  const panel = el('div', { class: 'shell-panel', 'data-id': s.sessionId, style: `height:${loadShellH()}px` });
+  const saved = (() => { try { return Number(localStorage.getItem(key)) || def; } catch { return def; } })();
+  const panel = el('div', { class: 'shell-panel', 'data-id': s.sessionId, style: `height:${Math.max(min, saved)}px` });
   const grip = el('div', { class: 'shell-grip', 'data-tip': '끌어서 높이 조절' });
   grip.onmousedown = (e) => { // drag the top edge; the xterm refits through its ResizeObserver
     e.preventDefault();
-    const startY = e.clientY, startH = panel.offsetHeight, max = sec.clientHeight - 160;
+    const startY = e.clientY, startH = panel.offsetHeight, max = host.clientHeight - room;
     document.body.classList.add('resizing');
-    const move = (ev) => { panel.style.height = `${Math.min(max, Math.max(120, startH + (startY - ev.clientY)))}px`; };
-    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); try { localStorage.setItem('shellH', String(panel.offsetHeight)); } catch { /* fine */ } };
+    const move = (ev) => { panel.style.height = `${Math.min(max, Math.max(min, startH + (startY - ev.clientY)))}px`; };
+    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); document.body.classList.remove('resizing'); try { localStorage.setItem(key, String(panel.offsetHeight)); } catch { /* fine */ } };
     document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
   };
   panel.append(grip, h.bar, h.box);
-  sec.append(panel);
-  requestAnimationFrame(() => { h.fit.fit(); resyncViewport(h.term); h.term.focus(); if (!h.ptyId && !h.exited) openShell(s); }); // an exited shell stays as it was until "다시 열기"
+  requestAnimationFrame(() => { if (!panel.isConnected) return; h.fit.fit(); resyncViewport(h.term); if (focus) h.term.focus(); if (!h.ptyId && !h.exited) openShell(s, focus); }); // an exited shell stays as it was until "다시 열기"
+  return panel;
 }
-function fitCurrent() { for (const t of [S.terms.get(S.sel), S.shells.get(S.sel)]) if (t?.box.isConnected) requestAnimationFrame(() => t.fit.fit()); }
+function renderShellPanel() {
+  const sec = $('#session-detail'), s = cur(), old = sec.querySelector(':scope > .shell-panel');
+  if (!S.shellOpen || !s || S.view !== 'sessions' || groupShown()) { old?.remove(); return; }
+  if (old?.dataset.id === s.sessionId) return;
+  old?.remove();
+  sec.append(shellPanel(s, sec));
+}
+function fitCurrent() { for (const t of [S.terms.get(S.sel), ...(S.group || []).map((id) => S.terms.get(id)), S.shells.get(S.sel)]) if (t?.box.isConnected) requestAnimationFrame(() => t.fit.fit()); }
 api.onPtyData(({ id, data }) => { for (const t of [...S.terms.values(), ...S.shells.values()]) if (t.ptyId === id) t.term.write(data); });
 api.onPtyExit(({ id, code }) => {
   for (const t of S.terms.values()) if (t.ptyId === id) {
@@ -796,6 +973,9 @@ function showCtx(e, s) {
     S.tabs.includes(s.sessionId) && s.sessionId === S.sel ? null : item('열기 (탭)', () => openSession(s.sessionId)),
     t?.ptyId ? item(s.live ? '떼기 (detach)' : '터미널 닫기', () => api.ptyKill(t.ptyId))
       : (!s.live || bg) ? item(s.live ? '붙기 (attach)' : '이어가기 (resume)', () => { openSession(s.sessionId); S.tab = 'terminal'; renderDetail(); attach(s); }) : null,
+    ...(S.group?.includes(s.sessionId) ? [item('나란히 보기에서 빼기', () => dropSplit(s.sessionId)), item('나란히 보기 끄기 (전체)', () => setGroup(null))]
+      : S.group ? [S.group.length < SPLIT_MAX ? item(`나란히 보기에 추가 (${S.group.length + 1}번 창)`, () => addSplit(s.sessionId)) : null]
+      : [s.sessionId !== S.sel && cur() ? item('오른쪽에 나란히 보기', () => addSplit(s.sessionId)) : null]),
     el('div', { class: 'sep' }),
     s.local ? null : item('이름 변경…', () => renameFlow(s)),
     s.job ? item(s.pinned ? '핀 해제' : '핀 고정 (맨 위로)', () => api.setPinned(s.short, !s.pinned, s.profile).then(loadSessions)) : null,
@@ -935,6 +1115,11 @@ api.onShortcut(({ action, arg }) => {
   else if (action === 'new') $('#btn-new').click();
   else if (action === 'search') { menu.classList.remove('closed'); menu.classList.add('open'); $('#sess-search').focus(); $('#sess-search').select(); }
   else if (action === 'sub') { if (S.view !== 'sessions') setView('sessions'); if (cur()) { S.tab = arg; renderDetail(); } }
+  else if (action === 'split') toggleSplit();
+  else if (action === 'splitFocus') focusSplit(arg);
+  else if (action === 'splitSwap') swapSplit();
+  else if (action === 'splitLayout') { if (groupShown() && S.group.length === 3) toggleLayout(); }
+  else if (action === 'keys') showKeys();
   else if (action === 'shell') { if (S.view !== 'sessions') setView('sessions'); if (cur()) toggleShell(); }
 });
 document.addEventListener('keydown', (e) => {
@@ -945,6 +1130,17 @@ document.addEventListener('keydown', (e) => {
 api.onSessionsChanged(loadSessions);
 api.onMemoryChanged(() => { S.memory = null; if (S.view === 'memory') loadMemory(); });
 $('#btn-refresh').onclick = () => { S.memory = null; loadSessions(); if (S.view === 'memory') loadMemory(); };
+// ---------- 단축키 안내: the menu's own table (main.js SHORTCUTS) plus the few keys handled in the page ----------
+const accLabel = (a) => a.split('+').map((k) => (isMac ? { CmdOrCtrl: '⌘', Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Left: '←', Right: '→' } : { CmdOrCtrl: 'Ctrl', Left: '←', Right: '→' })[k] || k).join(isMac ? '' : '+');
+function showKeys() {
+  const rows = [...api.shortcuts.filter((k) => !/^[2-9]번째 탭$/.test(k.label)).map((k) => (/^1번째 탭$/.test(k.label) ? { ...k, label: '1 ~ 9번째 탭', acc: k.acc.replace(/1$/, '1…9') } : k)),
+    { group: '세션 · 탭', label: '1 ~ 9번째 탭 (다른 방법)', acc: 'Alt+1…9' }, { group: '기타', label: '세션 화면으로 돌아가기 · 메뉴 닫기', acc: 'Esc' }, { group: '기타', label: '대화상자 확인', acc: 'Enter' }];
+  const groups = [...new Set(rows.map((r) => r.group))];
+  $('#keys-body').replaceChildren(...groups.flatMap((g) => [el('h4', { text: g }), el('div', { class: 'keys-grid' }, ...rows.filter((r) => r.group === g).flatMap((r) => [el('span', { text: r.label }), el('kbd', { text: accLabel(r.acc) })]))]),
+    el('p', { class: 'hint', text: '터미널에 포커스가 있어도 동작합니다. 같은 목록이 상단 메뉴 「탭」에도 있습니다.' }));
+  $('#dlg-keys').showModal();
+}
+$('#btn-keys').onclick = showKeys;
 const gearMenu = $('#gear-menu'); // hover menu like 세션 ▾: a click on an item shuts it until the pointer leaves
 $('#app-ver').textContent = api.appVersion;
 // ---------- app update: a GitHub Release newer than this build puts a button in the header; a click downloads this machine's

@@ -108,6 +108,20 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   place), in-conversation filter, subagent chatter skipped. The session flyout's search box filters rows as
   you type; Enter runs a full-text search over every transcript (grep narrows files, then parsed turns give
   role-aware snippets) and a hit opens that session at that turn.
+- **나란히 보기** — 2 to 4 sessions' terminals at once (terminal sub-tab). Right-click a tab or session row → 오른쪽에 나란히 보기
+  starts a group with the selected one; 나란히 보기에 추가 appends up to four. The group is fixed and ordered, its tabs carry ①–④;
+  selecting a grouped tab (or clicking into a terminal) only moves the active pane — header, shell and browser follow it.
+  Any other tab shows alone and the group returns when one of its tabs is selected. Layouts: 2 = side by side, 4 = 2×2, 3 = 타일
+  (one tall + two stacked) ↔ 세로 (three columns) by the layout button. Drag a border to resize (double-click evens it out;
+  sizes are remembered). Per pane: ⇤ moves it to the first place, × takes it out.
+  ⌘\\ (or ＋ 창 once a group exists) opens an empty pane with a picker — open tabs first, then other sessions, with a
+  search box (Enter takes the first hit, Esc cancels); the chosen session fills that pane and becomes the active one.
+  Each pane has its own shell under its terminal (the pane's shell icon, or ⌃` for the active pane; drag its top edge);
+  the full-width bottom shell panel is for a single session.
+  Shortcuts: ⌘\\ toggle, ⌘⌥← / ⌘⌥→ previous / next pane, ⌘⇧\\ active pane to first, ⌘⌥\\ layout. Remembered with the tabs.
+- **단축키 안내** — 톱니 메뉴 → 단축키 (also 탭 menu) lists every shortcut; the list and the menu come from one table (`SHORTCUTS` in main.js).
+- **작업 완료 알림** — a session that worked 10 s or longer and then stops fires a notification (not for the session on screen);
+  모양 → 알림 turns it off. Needs-input notifications are separate and always on.
 - **사내 앱 사용 기록** — the packaged app posts `{ app: "claude-code-manager", version, minutes }` to the QuantumMate
   server (`{endpoint}/apps/usage`, bearer token from `~/Library/Application Support/ai.quantumcns.quantummate/collect.json`,
   written by the QuantumMate team app): 0 on start, 5 per five 1-minute ticks, the rest on quit. No file → nothing is

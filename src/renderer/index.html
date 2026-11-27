@@ -35,6 +35,7 @@
         <button class="nav" id="btn-memory"><svg viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M8 9.5h8M8 13h8M8 16.5h5"/></svg>메모리</button>
         <div class="sep"></div>
         <button id="btn-look"><svg viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.7 1.8-1.5 0-.9-.8-1.3-.8-2.2 0-.9.8-1.6 1.8-1.6h1.6a4 4 0 0 0 4.1-4C20.5 7 16.7 3.5 12 3.5z"/><circle cx="8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="11" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/></svg>모양 · 테마 / 폰트 / 투명도</button>
+        <button id="btn-keys"><svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2.5"/><path d="M7 10.5h.01M11 10.5h.01M15 10.5h.01M8 14h8"/></svg>단축키</button>
         <button id="btn-refresh"><svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5V9H15"/></svg>새로고침</button>
         <div class="sep"></div>
         <div class="ver" id="ver-row" data-tip="누르면 새 버전이 있는지 확인합니다"><span class="ver-name">Claude Code Manager v<span id="app-ver"></span></span><span id="ver-status" class="msg"></span></div>
@@ -140,6 +141,13 @@
       <p class="hint">새 경로 <span class="mono" id="move-to"></span></p>
       <div id="move-plan" class="move-plan"></div>
       <div class="row right"><button value="cancel">취소</button><button value="ok" id="move-ok" class="danger" disabled>이동</button></div>
+    </form>
+  </dialog>
+  <dialog id="dlg-keys" class="glass">
+    <form method="dialog">
+      <h3>단축키</h3>
+      <div id="keys-body"></div>
+      <div class="row right"><button value="ok" class="primary" autofocus>닫기</button></div>
     </form>
   </dialog>
   <dialog id="dlg-confirm" class="glass">

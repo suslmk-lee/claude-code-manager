@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('api', {
   onChatEvent: on('chat:event'),
   webviewPreload: ipcRenderer.sendSync('wv:preload'),
   appVersion: ipcRenderer.sendSync('app:version'),
+  shortcuts: ipcRenderer.sendSync('app:shortcuts'),
   checkUpdate: (force) => ipcRenderer.invoke('update:check', !!force),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   openReleasePage: (url) => ipcRenderer.send('update:open', url),

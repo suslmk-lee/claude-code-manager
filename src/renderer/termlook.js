@@ -174,6 +174,9 @@ function openLook() {
       el('p', { class: 'hint', text: '글꼴과 크기는 모든 터미널(Claude · 셸)에 바로 적용됩니다.' }),
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', id: 'look-clicks', checked: LOOK.termClicks === 'on' ? '' : null, onchange: (e) => { LOOK.termClicks = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 마우스 클릭을 Claude 터미널에 전달'),
       el('p', { class: 'hint', text: '꺼 두면(기본) 클릭이 Claude 화면의 메뉴를 열지 않습니다. 예전엔 상태줄을 클릭하면 백그라운드 에이전트 목록이 열려 거기서 입력한 프롬프트가 새 세션 "(2)"로 가곤 했습니다. 휠 스크롤은 그대로 전달됩니다.' }))],
+    ['notify', '알림', () => el('div', {},
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.doneNotify === 'off' ? null : '', onchange: (e) => { LOOK.doneNotify = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 작업이 끝나면 알림'),
+      el('p', { class: 'hint', text: '10초 넘게 작업하던 세션이 멈추면 소리와 함께 알립니다. 지금 보고 있는 세션은 알리지 않습니다. 입력 대기 알림은 항상 켜져 있습니다.' }))],
     ['termTheme', '터미널 테마', () => el('div', { class: 'theme-list' }, ...TERM_THEMES.map((t) => el('div', { class: 'theme-row glass' + (t.id === LOOK.theme ? ' sel' : ''), 'data-id': t.id, onclick: () => { LOOK.theme = t.id; applyLook(); } },
       swatch(t), el('span', { class: 'theme-name', text: t.name }))))],
   ];
