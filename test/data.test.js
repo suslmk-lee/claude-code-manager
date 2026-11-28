@@ -407,6 +407,7 @@ test('usage: own fetch when the Claude Code cache is missing/stale', async () =>
 
   reset(); creds(Date.now() - 1000); // expired token
   u = await data.usage(); assert.equal(calls, 0); assert.equal(u.fiveHour.pct, 5); // stale CC cache
+  assert.match(u.fallback, /만료/); // …and the strip can say why the figure is a fallback
 
   reset(); creds(Date.now() + 3600e3); fail = true; rm(cj);
   fs.writeFileSync(sl, JSON.stringify({ five_hour: { utilization: 33 }, seven_day: { utilization: 44 } }));

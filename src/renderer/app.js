@@ -418,12 +418,13 @@ async function getUsage() { if (Date.now() - usageCache.at > 60000) { usageCache
 function renderUsageStrip(box, u) {
   if (!u) { box.replaceChildren(el('span', { class: 'msg', text: '사용량 캐시 없음' })); return; }
   const items = [['5h', u.fiveHour, '5시간 창'], ['7d', u.sevenDay, '7일 창'], ...(u.scoped || []).map((s) => [`${s.name} ${s.group === 'weekly' ? '7d' : s.group}`, s, `${s.name} 모델 ${s.group === 'weekly' ? '주간' : s.group} 한도`])];
-  box.replaceChildren(...items.filter(([, w]) => w && typeof w.pct === 'number').map(([label, w, desc]) => {
+  box.replaceChildren(...[...items.filter(([, w]) => w && typeof w.pct === 'number').map(([label, w, desc]) => {
     const cls = w.pct >= 90 ? 'bad' : w.pct >= 70 ? 'warn' : '';
     return el('span', { class: 'ug', 'data-tip': `${desc} 사용률 ${w.pct}%${w.resetsAt ? ` · ${fmtUntil(w.resetsAt) || '곧'} 뒤 초기화` : ''}${u.fetchedAt ? `\n사용량 캐시 ${fmtAgo(u.fetchedAt)} 갱신 · Claude Code가 세션 중에 갱신` : ''}` },
       el('span', { class: 'ug-l', text: label }), el('span', { class: 'ub' }, el('i', { class: cls, style: `width:${Math.min(100, w.pct)}%` })),
       el('b', { class: cls, text: `${w.pct}%` }), w.resetsAt ? el('span', { class: 'ug-r', text: fmtUntil(w.resetsAt) || '곧' }) : null);
-  }));
+  }), u.fallback ? el('span', { class: 'ug ug-note', text: u.scoped?.length ? '⚠ 오래된 값' : '⚠ 모델별 한도 못 읽음',
+    'data-tip': `${u.fallback}\n${u.scoped?.length ? '' : '지금 값은 상태줄 캐시에서 온 것이라 모델별 한도(Fable 등)가 없습니다.\n'}${u.fetchedAt ? `마지막 갱신 ${fmtAgo(u.fetchedAt)}\n` : ''}세션에서 /usage 를 한 번 열면 갱신됩니다. 계속되면 /login 을 다시 해 주세요.` }) : null].filter(Boolean));
 }
 function usageStrip() { const box = el('div', { class: 'usage-strip' }); getUsage().then((u) => renderUsageStrip(box, u)); return box; }
 setInterval(() => { const box = $('.usage-strip'); if (!box) return; usageCache.at = 0; getUsage().then((u) => renderUsageStrip(box, u)); }, 60000);

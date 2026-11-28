@@ -176,7 +176,7 @@ async function readTailTitle(file, bytes = 65536) {
 // missing/stale we query the same endpoint ourselves (read-only: never touch Claude Code's files, never refresh tokens).
 let CLAUDE_JSON = path.join(os.homedir(), '.claude.json'); // overridable for tests
 const USAGE_STALE = 300000, USAGE_TTL = 180000;
-const own = { at: 0, body: null, fails: 0, retryAt: 0, inflight: null };
+const own = { at: 0, body: null, fails: 0, retryAt: 0, inflight: null, why: '' }; // why: the reason the last try gave nothing, for the usage strip
 // Node's http2: the endpoint wants HTTP/2 + a user-agent. Resolves the parsed body; rejects on non-200/timeout.
 function fetchUsage(token) {
   return new Promise((resolve, reject) => {
@@ -212,13 +212,15 @@ async function ownUsage() {
   if (own.body && Date.now() - own.at < USAGE_TTL) return own.body;
   if (Date.now() < own.retryAt) return null;
   const cred = await credReader();
-  if (!cred?.accessToken || !(cred.expiresAt > Date.now())) return null;
+  if (!cred?.accessToken) { own.why = '로그인 정보를 찾지 못했습니다'; return null; }
+  if (!(cred.expiresAt > Date.now())) { own.why = '로그인 토큰이 만료되었습니다 (Claude Code가 갱신하면 풀립니다)'; return null; }
   own.inflight ||= (async () => {
     try {
       const b = await usageFetcher(cred.accessToken);
       if (!b || b.error || !b.five_hour) throw new Error('bad body');
-      Object.assign(own, { at: Date.now(), body: b, fails: 0, retryAt: 0 });
-    } catch {
+      Object.assign(own, { at: Date.now(), body: b, fails: 0, retryAt: 0, why: '' });
+    } catch (e) {
+      own.why = `사용량 조회가 실패했습니다 (${String(e?.message || e).slice(0, 40)})`;
       own.fails++; own.retryAt = Date.now() + Math.min(60, 5 * 2 ** (own.fails - 1)) * 60000; // 5 → 10 → 20 → … max 60 min
     } finally { own.inflight = null; }
   })();
@@ -237,7 +239,9 @@ async function usage() {
   // no fresh figure anywhere: the newer of Claude Code's cache and its status-line cache (which it refreshes more often)
   const sl = await readJson(path.join(HOME, 'statusline_cache.json'), null);
   const slp = pick(sl, sl?.cached_at ? Date.parse(sl.cached_at) || null : null, 'statusline');
-  return [cc, slp].filter(Boolean).sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0))[0] || null;
+  // a fallback figure: 5 h / 7 d may be a little old and per-model limits may be missing (the status-line cache has none) → say why
+  const best = [cc, slp].filter(Boolean).sort((a, b) => (b.fetchedAt || 0) - (a.fetchedAt || 0))[0] || null;
+  return best && { ...best, fallback: own.why || '새 사용량을 받지 못했습니다' };
 }
 // Logged-in account: the profile Claude Code stores after login, plus `claude auth status` (cached 5 min).
 let authCache = { at: 0, v: null };

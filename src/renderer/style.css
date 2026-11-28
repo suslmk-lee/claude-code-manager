@@ -168,6 +168,7 @@ section { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hid
 /* account usage gauges in the sub-tab row */
 .usage-strip { display:flex; gap:16px; align-items:center; margin-left:16px; min-width:0; overflow:hidden; color:var(--dim); font-size:11.5px; white-space:nowrap; }
 .ug { display:inline-flex; align-items:center; gap:6px; } .ug-l { font-weight:600; color:var(--fg); } .ug b { font-variant-numeric:tabular-nums; color:var(--fg); } .ug b.warn { color:var(--warn); } .ug b.bad { color:var(--bad); }
+.ug-note { color:var(--warn); cursor:help; }
 .ug-r { color:var(--dim); font-variant-numeric:tabular-nums; }
 .ub { width:52px; height:6px; border-radius:3px; background:var(--sel); overflow:hidden; } .ub i { display:block; height:100%; border-radius:3px; background:var(--ok); transition:width .6s ease; } .ub i.warn { background:var(--warn); } .ub i.bad { background:var(--bad); }
 .tabs .shell-toggle.active { color:var(--acc); }
