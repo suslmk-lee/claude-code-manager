@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, webContents, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, webContents, powerMonitor, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const pty = require('node-pty');
@@ -9,6 +9,7 @@ const ccmy = require('./ccmy');
 const ccmymem = require('./ccmymem');
 const ccmylink = require('./ccmylink');
 const appusage = require('./appusage'); // 사내 앱 사용 기록 (QuantumMate)
+const remote = require('./remote'); // 폰 원격 (QuantumMate 모바일)
 
 data.setCacheDir(path.join(app.getPath('userData'), 'cache'));
 
@@ -246,6 +247,13 @@ ipcMain.handle('ccmy:notes', () => ({ home: ccmymem.home(), notes: ccmymem.load(
 ipcMain.handle('ccmy:noteAdd', (_e, { text, scope }) => ccmymem.add(text, scope));
 ipcMain.handle('ccmy:noteDel', (_e, { text, scope }) => ccmymem.del(text, scope).length);
 ipcMain.handle('ccmy:journal', (_e, req) => ccmy.journal(req));
+// 폰 원격 (src/remote.js): on/off from 모양 › 알림; session list from the window, commands typed like a chat-tab send
+ipcMain.handle('remote:set', (_e, on) => remote.setEnabled(!!on, {
+  snapshot: () => (win && !win.isDestroyed() ? win.webContents.executeJavaScript('ccmySnapshot()') : Promise.resolve([])),
+  send: sendToSession,
+  notice: (title, body) => { try { new Notification({ title, body }).show(); } catch { /* unavailable */ } },
+}));
+ipcMain.handle('remote:alert', (_e, { kind, s }) => remote.alert(kind, s));
 // 자리 비움 알림: one line to the user's webhook ({ text }, the Slack incoming-webhook shape), only after idleMin without keyboard or mouse
 ipcMain.handle('ccmy:away', async (_e, { url, idleMin, text, force }) => {
   if (!/^https:\/\//i.test(String(url))) throw new Error('https:// 로 시작하는 주소만 쓸 수 있습니다');

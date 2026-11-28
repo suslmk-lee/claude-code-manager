@@ -41,6 +41,7 @@ const DEFAULT_FONT_STACK = '"D2Coding", "NanumGothicCoding", Menlo, Consolas, "C
 const FONT_CANDIDATES = ['D2Coding', 'D2CodingLigature', 'NanumGothicCoding', 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'Fira Code', 'FiraCode Nerd Font', 'Cascadia Code', 'Cascadia Mono', 'SF Mono', 'Menlo', 'Monaco', 'Source Code Pro', 'IBM Plex Mono', 'Hack', 'Hack Nerd Font', 'MesloLGS NF', 'Inconsolata', 'Ubuntu Mono', 'Roboto Mono', 'Victor Mono', 'Iosevka', 'Consolas', 'Courier New', 'Pretendard Mono', 'Sarasa Mono K'];
 
 const LOOK = (() => { try { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1, termClicks: 'off', ...JSON.parse(localStorage.getItem('termLook') || '{}') }; } catch { return { app: 'default', theme: 'default', surface: 'glass', font: '', size: 13, alpha: 1, termClicks: 'off' }; } })();
+api.remoteSet(LOOK.remote === 'on').catch(() => {}); // 폰 원격 (src/remote.js) :: 켜 둔 채 재시작하면 바로 다시 붙는다
 // card style (surface): how cards, tiles, tabs and stat blocks are drawn — style.css keys every rule off html[data-surface]
 const SURFACES = [
   { id: 'glass', name: '리퀴드 글라스', hint: '반투명 유리 · 굴절 림 · 광택 · 색 번짐' },
@@ -184,7 +185,10 @@ function openLook() {
         return el('div', {}, el('div', { class: 'ccmy-note-add' }, url, el('button', { text: '시험 전송', onclick: async () => { msg.textContent = '보내는 중…'; try { const r = await api.ccmyAway({ url: url.value.trim(), text: 'CCMy :: 시험 알림입니다', force: true }); msg.textContent = r.sent ? '보냈습니다' : `실패 (응답 ${r.status})`; } catch (e) { msg.textContent = '실패: ' + String(e.message).replace(/^.*?Error: /, ''); } } })), msg); })(),
       el('label', { class: 'look-field' }, '자리 비움 기준', lookNum('ccmyHookIdle', 3, 1, 120, 1), '분'),
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmyHookBody === 'on' ? '' : null, onchange: (e) => { LOOK.ccmyHookBody = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 세션의 질문 · 작업 내용도 함께 보내기'),
-      el('p', { class: 'hint', text: '웹훅 주소(Slack 수신 웹훅 형식, { "text": … })를 넣으면 CCMy 알림을 그 주소로도 보냅니다. 키보드 · 마우스를 이 시간 동안 건드리지 않았을 때만 보냅니다. 기본은 "입력 대기 :: 세션 이름" 한 줄만 나가고, 위 항목을 켜면 질문이나 작업 내용 300자까지 함께 나갑니다. 주소는 이 PC에만 저장됩니다. 비워 두면 아무것도 보내지 않습니다.' }))],
+      el('p', { class: 'hint', text: '웹훅 주소(Slack 수신 웹훅 형식, { "text": … })를 넣으면 CCMy 알림을 그 주소로도 보냅니다. 키보드 · 마우스를 이 시간 동안 건드리지 않았을 때만 보냅니다. 기본은 "입력 대기 :: 세션 이름" 한 줄만 나가고, 위 항목을 켜면 질문이나 작업 내용 300자까지 함께 나갑니다. 주소는 이 PC에만 저장됩니다. 비워 두면 아무것도 보내지 않습니다.' }),
+      el('div', { class: 'look-label', text: '폰 원격 (QuantumMate 모바일)' }),
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.remote === 'on' ? '' : null, onchange: async (e) => { LOOK.remote = e.target.checked ? 'on' : 'off'; applyLook(); await api.remoteSet(LOOK.remote === 'on').catch(() => {}); } }), ' 폰에서 세션 보기 · 지시 받기'),
+      el('p', { class: 'hint', text: '켜 두면 15초마다 세션 목록(이름 · 폴더 이름 · 상태 · 질문)을 QuantumMate 서버에 올리고, 입력 대기 · 작업 완료를 QuantumMate 알림으로 보냅니다. 폰 앱에서 보낸 지시는 실행 중인 백그라운드 세션에만 입력되고, 입력될 때 이 Mac 에 알림이 뜹니다. 10분 넘게 지난 지시는 버립니다. QuantumMate 팀앱에 로그인되어 있어야 합니다.' }))],
     ['ccmy', 'CCMy', () => el('div', {},
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmy === 'off' ? null : '', onchange: (e) => { LOOK.ccmy = e.target.checked ? 'on' : 'off'; applyLook(); ccmyApplyLook(); } }), ' CCMy 버블 표시'),
       el('p', { class: 'hint', text: '화면 구석에 떠 있는 에이전트입니다. 세션 상태를 묻거나 세션에 시킬 일을 말하면 대신 확인하고 전달합니다. 끌어서 옮길 수 있습니다.' }),

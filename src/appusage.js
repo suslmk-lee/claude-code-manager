@@ -38,4 +38,4 @@ function start(ver) {
 // 끌 때 :: 남은 분을 2초 안에 보낸다. 보낼 것이 없으면 null
 function flush() { const m = pending; pending = 0; return m ? send(m, 2000) : null; }
 
-module.exports = { APP_ID, start, flush, send, setFile: (p) => { file = p; }, setFetcher: (f) => { fetcher = f || ((...a) => fetch(...a)); } };
+module.exports = { APP_ID, start, flush, send, collect, setFile: (p) => { file = p; }, setFetcher: (f) => { fetcher = f || ((...a) => fetch(...a)); } };

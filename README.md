@@ -154,6 +154,12 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   included); saved from the conversation only after a 저장 click, never from an 이어서 진행 decision, and they cannot lift
   the forbidden list. `journal/YYYY-MM-DD.md`: one line per finished piece of work (10 s or more; a one-shot haiku call
   summarises the last turns), which answers "어제 뭐 했지" / "이번 주 한 일".
+- **폰 원격 (QuantumMate 모바일)** — 모양 › 알림 › 폰 원격 (off by default, `src/remote.js`). Every 15 s the session list
+  (name, folder name, state, question; no full paths) goes to the QuantumMate server (`POST {endpoint}/ccm/sync`, the same
+  collect.json token as below) and instructions sent from the phone come back; they are typed only into running background
+  sessions (like a chat-tab send), a macOS notification says so, and the result goes back on the next sync. Instructions
+  older than 10 min are dropped by the server. 입력 대기 · 작업 완료 also go to `POST /ccm/alert` (the user's QuantumMate alerts).
+  Server side: quantum-mate `server/internal/api/ccm.go`.
 - **사내 앱 사용 기록** — the packaged app posts `{ app: "claude-code-manager", version, minutes }` to the QuantumMate
   server (`{endpoint}/apps/usage`, bearer token from `~/Library/Application Support/ai.quantumcns.quantummate/collect.json`,
   written by the QuantumMate team app): 0 on start, 5 per five 1-minute ticks, the rest on quit. No file → nothing is

@@ -314,6 +314,7 @@ function ccmyAway(title, detail) {
 function ccmyAlert(s, what) {
   if (ccmyAutoStep(s, what)) return ccmyPeek(`이어서 진행 :: ${s.name}`);
   ccmyRing(); ccmyAway(`${what} :: ${s.name}`, s.job?.needs || s.job?.detail);
+  if (what === '입력 대기' || what === '작업 완료') api.remoteAlert(what === '입력 대기' ? 'needs' : 'done', { id: s.short, name: s.name, body: s.job?.needs || s.job?.detail || '' }).catch(() => {}); // 폰 원격 (켜 둔 동안만)
   ccmyPeek(`${what} :: ${s.name}`);
   if (ccmyRoot.hidden || (typeof LOOK !== 'undefined' && LOOK.ccmyBrief === 'off')) return;
   ccmyPrompt(`[이벤트] ${what} :: 세션 "${s.name}" (id ${s.short})${s.job?.needs ? ` · 질문: ${s.job.needs}` : ''}`, { sessionId: s.sessionId, cap: `${what} · ${s.name}`, kind: what === '작업 완료' ? 'done' : 'needs' });
