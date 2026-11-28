@@ -149,6 +149,12 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   `~/.claude/ccmy/links/<id>.md` and types it into the partner once that one is idle (`src/ccmylink.js`, no model in
   between). 10 deliveries / 4 h by default, ends when both said 완료; kept across restarts. A file both sessions write
   was tried first and dropped: a background session edits inside its own git worktree.
+- **CCMy 다듬기** — session cards redraw only when they change and keep their scroll; the thread follows the bottom only
+  while the user is there and is kept across restarts (`ccmyMsgs`, screen only); alerts within 2.5 s get one chime and one
+  briefing, and briefings run in their own conversation (`event`, restarted every 8) with the last few handed to the
+  chat; usage past its reset time neither warns nor stops 이어서 진행; `list_tasks` / `end_task` switch 이어서 진행 ·
+  연결 · 협업 off by voice; restored 이어서 진행 waits a minute before acting; one journal line per piece of work
+  (10 min merge); phone commands (`src/remote.js`) are refused when they touch the forbidden list.
 - **CCMy 기억** — plain files in `~/.claude/ccmy` (`src/ccmymem.js`), editable by hand and under 모양 › 기억. `notes.md`:
   지침 CCMy follows after a restart, `# 전체` for everything and `# <folder>` for sessions in that folder (이어서 진행
   included); saved from the conversation only after a 저장 click, never from an 이어서 진행 decision, and they cannot lift

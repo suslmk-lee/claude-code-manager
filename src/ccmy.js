@@ -24,6 +24,7 @@ const SYSTEM = `너는 CCMy다. Claude Code Manager(여러 Claude Code 세션을
 - send_to_session :: 그 세션에 글을 입력 (사용자가 확인 버튼을 눌러야 실제로 전송된다). 같은 글을 여러 세션에 보낼 때는 also 에 나머지 id를 넣어 한 번에 확인받는다
 - when_done :: "A 세션이 끝나면 B 세션에 …을 시켜" 같은 연결을 등록 (사용자가 등록 버튼을 눌러야 한다)
 - link_sessions :: 두 세션을 협업으로 잇는다 (사용자가 연결 버튼을 눌러야 한다). 그 뒤로는 두 세션이 서로에게 요청 · 알림을 적으면 앱이 상대 세션에 전달하고 협업 문서에 기록한다. 너를 거치지 않는다
+- list_tasks · end_task :: 지금 켜져 있는 이어서 진행 · 연결 · 협업을 보고, 사용자가 끄라고 한 것을 끈다
 - relay :: 등록된 연결을 실행 ("[연결]" 메시지에 답할 때만)
 - read_handoff :: 한 프로젝트 폴더의 인수인계 메모 (최근 작업마다 한 일 · 남은 일 · 막힌 점)
 - dismiss_waiting :: 더 답할 필요가 없는 입력 대기를 해제 (세션은 지우지 않는다). 사용자가 정리해 달라고 했을 때만 쓴다
@@ -44,6 +45,7 @@ const SYSTEM = `너는 CCMy다. Claude Code Manager(여러 Claude Code 세션을
 - 전송이 거절되면 다시 시도하지 말고 무엇을 바꿀지 묻는다.
 - "[자동 진행]"으로 시작하는 메시지는 사용자가 「이어서 진행」을 켠 세션이 멈췄다는 앱의 알림이다. read_session 으로 읽고 반드시 auto_continue 를 한 번 호출한다. 목표 범위 안이고 답이 분명하면 send (세션의 Claude가 바로 이해할 완결된 지시 한두 문장), 목표를 이뤘으면 done, 그 밖에는 ask_user. 머지 · 푸시 · 배포 · 릴리스 · 삭제 · 결제 · 외부 전송, 비용이나 방향을 바꾸는 선택, 목표 밖의 일은 항상 ask_user. 확신이 없으면 ask_user. 도구가 거절하면 다시 시도하지 않는다.
 - "진전 없음" 이벤트는 작업 중이라는 세션이 한동안 아무것도 쓰지 않았다는 뜻이다. read_session 으로 마지막에 하던 일을 보고, 오래 걸리는 명령을 기다리는 중으로 보이는지 · 같은 오류를 되풀이하다 멈춘 것으로 보이는지와 사용자가 할 일(기다리기 · 세션 열어 보기 · 중지)을 알린다. 스스로 중지하거나 글을 보내지 않는다.
+- "[최근 알림 …]"으로 시작하는 묶음은 네가 알림 요약에서 사용자에게 이미 알린 내용이다. 사용자가 "그 세션", "방금 그 알림"이라고 하면 이것을 가리킨다.
 - "[이벤트]"로 시작하는 메시지는 앱이 보낸 알림이다. 해당 세션을 read_session 으로 읽고, 무슨 일인지 · 사용자가 정해야 할 것 · 추천 답(있으면)을 2~4줄로 알린다. 완료 알림이면 결과만 한두 줄로 요약한다.
 - 세션이 "고쳤다 · 끝냈다 · 커밋했다"고 한 말은 주장일 뿐이다. 결과를 보고하거나 auto_continue 의 done 을 정하기 전에, 그리고 사용자가 실제 변경을 물으면 check_repo 로 확인한다. 말과 실제가 다르면 그 차이를 알린다 (이어서 진행 중이면 ask_user). 테스트 통과 여부는 check_repo 로 알 수 없으니 확인했다고 말하지 않는다.
 - start_session · resume_session · stop_session 은 사용자가 이 대화에서 직접 시켰을 때만 쓴다. start_session 의 폴더는 같은 폴더를 쓰는 기존 세션의 id(from) 나 사용자가 말한 절대 경로(folder)로 정하고, 짐작한 경로는 쓰지 않는다. prompt 는 새 세션의 Claude가 그것만 읽고 일할 수 있게 완결된 지시로 쓴다.
@@ -192,6 +194,9 @@ function start(key, deps, emitAll, model) {
           return out(`연결했습니다 (협업 ${id}). 두 세션이 쉬고 있을 때 규칙을 알립니다. 주고받은 글은 ${f} 에 기록됩니다.`);
         } catch (e) { return out('연결하지 못했습니다: ' + (e?.message || e)); }
       }),
+    tool('list_tasks', '지금 켜져 있는 것들: 이어서 진행(auto), 연결(chain), 협업(link). 각각의 kind 와 id.', {}, async () => { const t = await deps.tasks(); return out(t.length ? t : '켜져 있는 이어서 진행 · 연결 · 협업이 없습니다.'); }),
+    tool('end_task', '이어서 진행 · 연결 · 협업 하나를 끈다. 사용자가 끄라고 했을 때만.', { kind: z.enum(['auto', 'chain', 'link']), id: z.string().describe('list_tasks 의 id') },
+      async ({ kind, id }) => out(await deps.taskEnd(kind, id) ? '껐습니다.' : '그런 항목이 없습니다. list_tasks 로 확인하세요.')),
     tool('relay', '등록된 연결을 실행한다 ([연결] 메시지에 답할 때만): 뒤 세션에 글을 확인 없이 보낸다.', { rule: z.string().describe('[연결] 메시지에 적힌 연결 번호'), text: z.string().min(1).describe('뒤 세션에 보낼 글: 등록된 지시 + 앞 세션의 결과') },
       async ({ rule, text }) => {
         const c = await deps.chainCheck(rule); if (!c) return out('그런 연결이 없습니다 (이미 실행됐거나 취소됐습니다).');
@@ -209,7 +214,7 @@ function start(key, deps, emitAll, model) {
   convs.set(key, me);
   me.q = query({ prompt: input, options: {
     cwd: os.homedir(), model: model || 'haiku', systemPrompt: `${SYSTEM}\n\n${MEMO(me.notes)}`, tools: [], mcpServers: { ccm: server }, strictMcpConfig: true,
-    allowedTools: ['mcp__ccm__list_sessions', 'mcp__ccm__read_session', 'mcp__ccm__open_session', 'mcp__ccm__dismiss_waiting', 'mcp__ccm__auto_continue', 'mcp__ccm__read_journal', 'mcp__ccm__check_repo', 'mcp__ccm__usage', 'mcp__ccm__read_handoff', ...(key === 'chat' ? ['mcp__ccm__relay'] : []), ...(key === 'chat' ? ['mcp__ccm__forget'] : [])], // auto_continue checks its own limits (above) instead of asking
+    allowedTools: ['mcp__ccm__list_sessions', 'mcp__ccm__read_session', 'mcp__ccm__open_session', 'mcp__ccm__dismiss_waiting', 'mcp__ccm__auto_continue', 'mcp__ccm__read_journal', 'mcp__ccm__check_repo', 'mcp__ccm__usage', 'mcp__ccm__read_handoff', ...(key === 'chat' ? ['mcp__ccm__relay', 'mcp__ccm__list_tasks', 'mcp__ccm__end_task'] : []), ...(key === 'chat' ? ['mcp__ccm__forget'] : [])], // auto_continue checks its own limits (above) instead of asking
     settingSources: ['user'], // sign-in / gateway env lives in the user settings; no project files (cwd is the home folder)
     persistSession: false, abortController: abort, pathToClaudeCodeExecutable: L.bin, env: L.env,
     canUseTool: async (name, inp, opts) => {

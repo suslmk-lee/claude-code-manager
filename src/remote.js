@@ -6,6 +6,9 @@
 // 지시는 실행 중인 백그라운드 세션 (canSend) 에만 넣는다. 결과는 다음 sync 의 done 으로 보고. 실패는 조용히 버리고 다음 틱에 다시
 // ponytail: 폴링 15초 :: 서버가 SSE 를 주면 그때 바꾼다
 const { collect } = require('./appusage');
+// same list as CCMy's 이어서 진행: merge · push · deploy · delete · payment · outward messages are not started from the phone,
+// where nobody is at the screen to confirm (a phone command goes straight into the session)
+const FORBID = () => require('./ccmy').FORBID; // loaded on the first command, not at start-up
 
 const EVERY = 15000;
 let fetcher = (...a) => fetch(...a);
@@ -38,6 +41,8 @@ async function tick() {
     for (const c of res?.commands || []) {
       const s = sessions.find((x) => x.id === c.session);
       if (!s?.canSend) { done.push({ id: c.id, ok: false, note: s ? '실행 중인 백그라운드 세션이 아닙니다' : '세션을 찾지 못했습니다' }); continue; }
+      const hit = FORBID().exec(String(c.body));
+      if (hit) { done.push({ id: c.id, ok: false, note: `되돌리기 어려운 일("${hit[0]}")은 폰에서 시킬 수 없습니다. PC에서 직접 해 주세요` }); deps.notice?.(`폰 지시를 막았습니다 :: ${s.name}`, String(c.body).slice(0, 200)); continue; }
       try {
         await deps.send({ short: s.id, cwd: s.cwd, text: c.body, profile: s.profile });
         done.push({ id: c.id, ok: true, note: '' });

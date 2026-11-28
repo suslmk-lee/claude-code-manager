@@ -34,7 +34,7 @@ const ccmyChar = () => (typeof LOOK !== 'undefined' && CCMY_CHARS[LOOK.ccmyChar]
 const ccmyModel = () => (typeof LOOK !== 'undefined' && LOOK.ccmyModel) || 'haiku';
 const ccmyIcon = () => { const w = document.createElement('span'); w.className = 'ccmy-ico'; w.innerHTML = ccmyCharSvg(ccmyChar()); return w; };
 const CCMY_RECENT_H = 6; // open tabs that moved within this many hours are listed under the alerts
-const CCMY = { done: [], open: false, sent: new Map(), peekTimer: 0, dropped: new Map(), auto: new Map(), chains: new Map(), links: new Map(), restored: false, stall: new Map(), usage: null, usageSeen: new Map(), view: 'chat', msgs: [], turns: [], status: '' }; // msgs: the thread · turns: prompts in flight, oldest first ({ sessionId } for an alert) // dropped: sessionId → lastActivity when the user cleared its 최근 card // done: [{ id, at }] newest first · sent: sessionId → status line after a reply
+const CCMY = { done: [], open: false, sent: new Map(), peekTimer: 0, dropped: new Map(), auto: new Map(), chains: new Map(), links: new Map(), batch: [], batchTimer: 0, briefs: [], eventN: 0, rangAt: 0, listHtml: '', stick: false, restored: false, stall: new Map(), usage: null, usageSeen: new Map(), view: 'chat', msgs: [], turns: [], status: '' }; // msgs: the thread · turns: prompts in flight, oldest first ({ sessionId } for an alert) // dropped: sessionId → lastActivity when the user cleared its 최근 card // done: [{ id, at }] newest first · sent: sessionId → status line after a reply
 const ccmyPos = (() => { try { const p = JSON.parse(localStorage.getItem('ccmyPos')); if (p.r >= 0 && p.b >= 0) return p; } catch { /* default */ } return { r: 20, b: 20 }; })();
 
 // 이어서 진행 and 연결 outlive a restart (an update install included): localStorage 'ccmyState', expired ones dropped on load
@@ -46,6 +46,12 @@ try {
   for (const [id, l] of st.links || []) if (l.until > Date.now() && l.count < l.max) CCMY.links.set(id, l);
   CCMY.restored = CCMY.auto.size + CCMY.chains.size + CCMY.links.size > 0;
 } catch { /* start empty */ }
+// the thread too (the last 60 messages; what was on screen, not the agent's memory). A card left unanswered counts as cancelled.
+const CCMY_RESTART = '앱을 다시 켰습니다 :: 위 내용은 화면에만 남아 있고, CCMy는 새 대화로 시작합니다';
+try {
+  CCMY.msgs = JSON.parse(localStorage.getItem('ccmyMsgs') || '[]').map((m) => m.who === 'confirm' && (m.state === 'ask' || m.state === 'wait') ? { ...m, state: 'no' } : m);
+  if (CCMY.msgs.length && CCMY.msgs[CCMY.msgs.length - 1].text !== CCMY_RESTART) CCMY.msgs.push({ who: 'note', text: CCMY_RESTART });
+} catch { CCMY.msgs = []; }
 
 const ccmyRoot = el('div', { id: 'ccmy', hidden: '' });
 const ccmyBadge = el('span', { class: 'pill', hidden: '' });
@@ -58,7 +64,7 @@ const ccmyChat = el('div', { class: 'ccmy-chat' }, ccmyThread, el('div', { class
 const ccmyCount = el('span', { class: 'pill', hidden: '' });
 const ccmyModelChip = el('span', { class: 'ccmy-model', 'data-tip': 'CCMy가 쓰는 모델 (모양 › CCMy에서 바꿉니다)' });
 const ccmySeg = el('div', { class: 'ccmy-seg' }, ...[['chat', '대화'], ['list', '세션']].map(([v, t]) => el('button', { 'data-v': v, onclick: () => { CCMY.view = v; ccmyRender(); if (v === 'chat') ccmyInput.focus(); } }, t, v === 'list' ? ccmyCount : null)));
-const ccmyQuick = el('div', { class: 'ccmy-chips' }, ...[['지금 상황 정리', '지금 상황 정리해줘'], ['입력 대기 세션', '입력 기다리는 세션 뭐야?'], ['방금 끝난 작업', '방금 끝난 작업 요약해줘'], ['오늘 한 일', '오늘 한 일을 작업 일지로 정리해줘']].map(([t, q]) => el('button', { text: t, onclick: () => ccmyAsk(q) })));
+const ccmyQuick = el('div', { class: 'ccmy-chips' }, ...[['상황 정리', '지금 상황 정리해줘'], ['입력 대기', '입력 기다리는 세션 뭐야?'], ['방금 끝난 일', '방금 끝난 작업 요약해줘'], ['오늘 한 일', '오늘 한 일을 작업 일지로 정리해줘']].map(([t, q]) => el('button', { text: t, onclick: () => ccmyAsk(q) })));
 ccmyChat.insertBefore(ccmyQuick, ccmyChat.lastChild);
 const ccmyPanel = el('div', { class: 'ccmy-panel', hidden: '', onkeydown: (e) => { if (e.key === 'Escape') { e.stopPropagation(); ccmyToggle(false); } } },
   el('div', { class: 'ccmy-head' },
@@ -96,7 +102,7 @@ function ccmyToggle(open = !CCMY.open) {
   CCMY.open = open;
   ccmyPanel.hidden = !open;
   ccmyRoot.classList.toggle('open', open);
-  if (open) { ccmyPeekEl.hidden = true; ccmyRender(); ccmyThreadRender(); if (CCMY.view === 'chat') ccmyInput.focus(); }
+  if (open) { ccmyPeekEl.hidden = true; CCMY.stick = true; CCMY.listHtml = ''; ccmyRender(); ccmyThreadRender(); if (CCMY.view === 'chat') ccmyInput.focus(); }
 }
 // one line beside the bubble for a few seconds; the panel stays closed until the user asks
 function ccmyPeek(text, ms = 6000) {
@@ -167,7 +173,8 @@ let ccmyAudio = null;
 function ccmyRing() {
   if (ccmyRoot.hidden) return;
   ccmyFab.classList.remove('ring'); void ccmyFab.offsetWidth; ccmyFab.classList.add('ring'); // restart if one is already running
-  if (!ccmySoundOn()) return;
+  if (!ccmySoundOn() || Date.now() - CCMY.rangAt < 3000) return; // several alerts at once: one chime
+  CCMY.rangAt = Date.now();
   try {
     const ac = ccmyAudio || (ccmyAudio = new AudioContext()), t0 = ac.currentTime;
     for (const [f, at] of [[880, 0], [1318.5, 0.16]]) { // A5 → E6
@@ -198,13 +205,13 @@ function ccmyWatch() {
     if (document.hasFocus() && S.view === 'sessions' && id === S.sel) continue; // the user is looking at it
     const what = `${min}분째 진전 없음`;
     ccmyRing(); ccmyPeek(`${what} :: ${s.name}`, 10000); ccmyAway(`${what} :: ${s.name}`);
-    if (brief) ccmyPrompt(`[이벤트] ${what} :: 세션 "${s.name}" (id ${s.short}) 이 작업 중 상태인데 ${min}분 동안 기록에 새 내용이 없습니다.`, { sessionId: id, cap: `${what} · ${s.name}`, kind: 'needs' });
+    if (brief) ccmyPrompt(`[이벤트] ${what} :: 세션 "${s.name}" (id ${s.short}) 이 작업 중 상태인데 ${min}분 동안 기록에 새 내용이 없습니다.`, { sessionId: id, cap: `${what} · ${s.name}`, kind: 'needs', event: true });
     else { CCMY.msgs.push({ who: 'bot', text: `작업 중 상태인데 ${min}분 동안 새 내용이 없습니다. 긴 명령을 돌리는 중일 수도, 멈춘 것일 수도 있습니다.`, sessionId: id, cap: `${what} · ${s.name}`, kind: 'needs', at: Date.now() }); ccmyThreadRender(); }
   }
   getUsage().then((u) => {
     CCMY.usage = u;
     for (const [label, w] of [['5시간', u?.fiveHour], ['7일', u?.sevenDay]]) {
-      if (!w || typeof w.pct !== 'number' || w.pct < ccmyUsagePct()) continue;
+      if (!ccmyUsageLive(w) || w.pct < ccmyUsagePct()) continue;
       if (Date.now() < (CCMY.usageSeen.get(label) || 0)) continue; // already said for this window: quiet until it resets
       CCMY.usageSeen.set(label, Date.parse(w.resetsAt) || Date.now() + 5 * 3600000);
       const text = `${label} 사용량 ${w.pct}%${w.resetsAt ? ` · ${fmtUntil(w.resetsAt) || '곧'} 뒤 초기화` : ''}`;
@@ -214,7 +221,8 @@ function ccmyWatch() {
     }
   }).catch(() => {});
 }
-const ccmyUsageFull = () => (CCMY.usage?.fiveHour?.pct ?? 0) >= CCMY_AUTO_USAGE;
+const ccmyUsageLive = (w) => !!w && typeof w.pct === 'number' && !(Date.parse(w.resetsAt) < Date.now()); // past its reset: the figure is from the window before (usage could not be refreshed)
+const ccmyUsageFull = () => ccmyUsageLive(CCMY.usage?.fiveHour) && CCMY.usage.fiveHour.pct >= CCMY_AUTO_USAGE;
 // ---- 연결 (when_done / relay in src/ccmy.js): "when A finishes, give B this". Registered with a click on its card; when A
 // stops, the agent reads A and relays the instruction plus A's result to B without asking again. One shot, 24 h.
 function ccmyChainAdd(c) {
@@ -296,12 +304,26 @@ function ccmyLinkPump() { // every poll: read what a stopped side said, deliver 
     }
   }
 }
+// for list_tasks / end_task (src/ccmy.js): what is switched on right now, and switching one off by voice
+const ccmyTasks = () => [...[...CCMY.auto].map(([id, a]) => ({ kind: 'auto', id, what: `이어서 진행 · ${a.name} (${a.count}/${a.max}) :: ${a.goal}` })),
+  ...[...CCMY.chains].map(([id, c]) => ({ kind: 'chain', id, what: `연결 · ${c.watchName} 이 끝나면 ${c.targetName} 에 :: ${c.text.slice(0, 120)}` })),
+  ...[...CCMY.links].map(([id, l]) => ({ kind: 'link', id, what: `협업 · ${l.sides[0].name} ↔ ${l.sides[1].name} (${l.count}/${l.max}) :: ${l.goal}` }))];
+function ccmyTaskEnd(kind, id) {
+  const has = (kind === 'auto' ? CCMY.auto : kind === 'chain' ? CCMY.chains : CCMY.links).has(id);
+  if (has) kind === 'auto' ? ccmyAutoOff(id, '사용자가 CCMy에게 끄라고 했습니다') : kind === 'chain' ? ccmyChainOff(id) : ccmyLinkOff(id, '사용자가 CCMy에게 끝내라고 했습니다');
+  return has;
+}
 // every poll (src/renderer/app.js). First time with sessions loaded: pick up what was kept across the restart
 function ccmyTick() {
   if (CCMY.restored && S.sessions.length) {
     CCMY.restored = false;
-    for (const [id, a] of [...CCMY.auto]) { const s = S.sessions.find((x) => x.sessionId === id); CCMY.msgs.push({ who: 'note', text: `이어서 진행 유지 · ${a.name} (${a.count}/${a.max})` }); if (s && activity(s) !== 'working') ccmyAutoStep(s, needsInput(s) ? '입력 대기' : '대기 중'); }
-    for (const [, c] of CCMY.chains) { const s = S.sessions.find((x) => x.sessionId === c.watch); if (s && !c.fired && activity(s) !== 'working' && !needsInput(s)) ccmyChainFire(s); }
+    // nothing is sent the moment the app opens: a minute first, so the user sees what is still on and can switch it off
+    for (const [, a] of CCMY.auto) CCMY.msgs.push({ who: 'note', text: `이어서 진행 유지 · ${a.name} (${a.count}/${a.max}) :: 1분 뒤부터 다시 판단합니다` });
+    if (CCMY.auto.size) ccmyPeek(`이어서 진행 ${CCMY.auto.size}건 유지 :: 1분 뒤 다시 시작`, 12000);
+    setTimeout(() => {
+      for (const [id] of [...CCMY.auto]) { const s = S.sessions.find((x) => x.sessionId === id); if (s && activity(s) !== 'working') ccmyAutoStep(s, needsInput(s) ? '입력 대기' : '대기 중'); }
+      for (const [, c] of CCMY.chains) { const s = S.sessions.find((x) => x.sessionId === c.watch); if (s && !c.fired && activity(s) !== 'working' && !needsInput(s)) ccmyChainFire(s); }
+    }, 60000);
     ccmyRender(); ccmyThreadRender();
   }
   ccmyLinkPump(); ccmyWatch();
@@ -317,7 +339,17 @@ function ccmyAlert(s, what) {
   if (what === '입력 대기' || what === '작업 완료') api.remoteAlert(what === '입력 대기' ? 'needs' : 'done', { id: s.short, name: s.name, body: s.job?.needs || s.job?.detail || '' }).catch(() => {}); // 폰 원격 (켜 둔 동안만)
   ccmyPeek(`${what} :: ${s.name}`);
   if (ccmyRoot.hidden || (typeof LOOK !== 'undefined' && LOOK.ccmyBrief === 'off')) return;
-  ccmyPrompt(`[이벤트] ${what} :: 세션 "${s.name}" (id ${s.short})${s.job?.needs ? ` · 질문: ${s.job.needs}` : ''}`, { sessionId: s.sessionId, cap: `${what} · ${s.name}`, kind: what === '작업 완료' ? 'done' : 'needs' });
+  CCMY.batch.push({ s, what }); clearTimeout(CCMY.batchTimer); CCMY.batchTimer = setTimeout(ccmyBrief, 2500);
+}
+// Alerts that arrive within a few seconds are briefed in one turn. Briefings run in their own conversation ('event'), so a
+// day of them does not ride along with every question in the chat; it starts over every CCMY_EVENT_KEEP briefings, and the
+// chat is told what was briefed since the user last spoke (ccmyAsk).
+const CCMY_EVENT_KEEP = 8;
+function ccmyBrief() {
+  const b = CCMY.batch.splice(0); if (!b.length) return;
+  const line = ({ s, what }) => `${what} :: 세션 "${s.name}" (id ${s.short})${s.job?.needs ? ` · 질문: ${s.job.needs}` : ''}`;
+  if (b.length === 1) ccmyPrompt(`[이벤트] ${line(b[0])}`, { sessionId: b[0].s.sessionId, cap: `${b[0].what} · ${b[0].s.name}`, kind: b[0].what === '작업 완료' ? 'done' : 'needs', event: true });
+  else ccmyPrompt(`[이벤트] 알림 ${b.length}건이 함께 왔습니다. 세션마다 한두 줄씩, 사용자가 정해야 할 것이 있는 세션을 먼저 알려 주세요.\n${b.map((x) => '- ' + line(x)).join('\n')}`, { cap: `알림 ${b.length}건 · ${b.map((x) => x.s.name).join(', ')}`, kind: 'needs', event: true });
 }
 // what the agent's tools see (src/main.js asks for it): open tabs, running, waiting, or moved in the last 24 h — newest first
 function ccmySnapshot() {
@@ -336,7 +368,8 @@ async function ccmyChanged(short) {
   ccmyRender();
 }
 function ccmyPrompt(text, turn = {}) {
-  turn.conv = turn.kind === 'auto' ? 'auto' : 'chat'; // 이어서 진행 decisions run in their own conversation, with their own model
+  turn.conv = turn.kind === 'auto' ? 'auto' : turn.event ? 'event' : 'chat'; // 이어서 진행 decisions and alert briefings each run in their own conversation
+  if (turn.event) CCMY.eventN++;
   CCMY.turns.push(turn); CCMY.status = '생각 중…';
   ccmyThreadRender();
   api.ccmySend(text, turn.conv === 'auto' ? ccmyAutoModel() : ccmyModel(), turn.conv).catch((e) => { CCMY.turns = CCMY.turns.filter((t) => t !== turn); CCMY.status = ''; CCMY.msgs.push({ who: 'error', text: '시작 실패: ' + e.message }); ccmyThreadRender(); });
@@ -344,19 +377,21 @@ function ccmyPrompt(text, turn = {}) {
 function ccmyAsk(text = ccmyInput.value.trim()) {
   if (!text) return;
   ccmyInput.value = ''; ccmyInput.style.height = '';
-  CCMY.msgs.push({ who: 'me', text });
-  ccmyPrompt(text);
+  CCMY.msgs.push({ who: 'me', text }); CCMY.stick = true;
+  const briefs = CCMY.briefs.splice(0);
+  ccmyPrompt(briefs.length ? `[최근 알림 :: 네가 알림 요약으로 사용자에게 이미 알린 내용이다. 참고용]\n${briefs.map((b) => '- ' + b).join('\n')}\n\n${text}` : text);
 }
 function ccmyReset() { api.ccmyClose('chat'); CCMY.msgs = []; CCMY.turns = CCMY.turns.filter((t) => t.conv !== 'chat'); CCMY.status = CCMY.turns.length ? '생각 중…' : ''; ccmyThreadRender(); }
 const CCMY_TOOL = { auto_continue: '이어서 진행 판단 중…', dismiss_waiting: '입력 대기 정리 중…', list_sessions: '세션 목록 확인 중…', read_session: '세션 대화 읽는 중…', open_session: '세션 여는 중…', send_to_session: '전송 확인을 기다리는 중…', when_done: '연결 등록 확인을 기다리는 중…', link_sessions: '협업 연결 확인을 기다리는 중…', relay: '연결된 세션에 전달 중…', read_handoff: '인수인계 메모 읽는 중…', start_session: '시작 확인을 기다리는 중…', resume_session: '확인을 기다리는 중…', stop_session: '중지 확인을 기다리는 중…', remember: '저장 확인을 기다리는 중…', forget: '지침 지우는 중…', read_journal: '작업 일지 읽는 중…', usage: '사용량 확인 중…', check_repo: '실제 변경 확인 중…' };
 api.onCcmyEvent((m) => {
   if (m.type === 'assistant' && !m.parent_tool_use_id) {
     const c = m.message?.content || [], text = c.filter((b) => b.type === 'text').map((b) => b.text).join('').trim(), use = c.find((b) => b.type === 'tool_use');
-    if (text) { const { sessionId, cap, kind } = CCMY.turns.find((t) => t.conv === m.conv) || {}; CCMY.msgs.push({ who: 'bot', text, sessionId, cap, kind, at: Date.now() }); if (sessionId) ccmyPeek(text.replace(CCMY_SUGGEST, '').replace(/[*_`#>]/g, '').trim().split('\n')[0], 12000); }
+    if (text) { const { sessionId, cap, kind } = CCMY.turns.find((t) => t.conv === m.conv) || {}; CCMY.msgs.push({ who: 'bot', text, sessionId, cap, kind, at: Date.now() }); if (m.conv === 'event') CCMY.briefs = [...CCMY.briefs, `${cap || '알림'} :: ${text.replace(CCMY_SUGGEST, '').replace(/\s+/g, ' ').slice(0, 300)}`].slice(-5); if (sessionId) ccmyPeek(text.replace(CCMY_SUGGEST, '').replace(/[*_`#>]/g, '').trim().split('\n')[0], 12000); }
     if (use) CCMY.status = CCMY_TOOL[use.name.replace('mcp__ccm__', '')] || '작업 중…';
   } else if (m.type === 'result') {
     { const i = CCMY.turns.findIndex((t) => t.conv === m.conv); if (i !== -1) CCMY.turns.splice(i, 1); } CCMY.status = CCMY.turns.length ? '생각 중…' : '';
     if (m.is_error) CCMY.msgs.push({ who: 'error', text: '오류: ' + (m.result || m.subtype || '응답을 받지 못했습니다') });
+    if (m.conv === 'event' && CCMY.eventN >= CCMY_EVENT_KEEP && !CCMY.turns.some((t) => t.conv === 'event')) { CCMY.eventN = 0; api.ccmyClose('event'); }
   } else if (m.type === 'confirm') CCMY.msgs.push({ who: 'confirm', id: m.id, kind: m.kind, name: m.name, sessionId: m.sessionId, text: m.text, state: 'ask' });
   else if (m.type === 'confirm_cancelled') { const c = CCMY.msgs.find((x) => x.who === 'confirm' && x.id === m.id); if (c) c.state = 'no'; }
   else if (m.type === 'error' || m.type === 'closed') { if (m.type === 'error') CCMY.msgs.push({ who: 'error', text: '오류: ' + m.message }); CCMY.turns = CCMY.turns.filter((t) => t.conv !== m.conv); CCMY.status = CCMY.turns.length ? '생각 중…' : ''; }
@@ -376,6 +411,7 @@ function ccmySuggest(short, text) {
 const CCMY_CARD = { send: ['', ' 세션에 보냅니다', '보내기', '보냄'], remember: ['지침으로 기억합니다 · ', '', '저장', '저장함 (모양 › 기억에서 지울 수 있습니다)'], start: ['새 세션을 시작합니다 · ', '', '시작', '시작함'], resume: ['', ' 세션을 다시 켭니다', '다시 켜기', '다시 켬'], stop: ['', ' 세션을 중지합니다', '중지', '중지함'], chain: ['', ' 세션이 끝나면', '등록', '등록함 (세션 탭에서 취소할 수 있습니다)'], link: ['협업 연결 · ', '', '연결', '연결함 (세션 탭에서 끝낼 수 있습니다)'] };
 function ccmyThreadRender() {
   ccmyRoot.classList.toggle('busy', !!CCMY.status);
+  try { localStorage.setItem('ccmyMsgs', JSON.stringify(CCMY.msgs.slice(-60))); } catch { /* not kept */ }
   if (!CCMY.open) return;
   const go = (id) => id ? el('button', { text: '세션 열기', onclick: () => ccmyGo(id) }) : null;
   const answer = async (c, ok) => {
@@ -389,11 +425,13 @@ function ccmyThreadRender() {
     const body = el('div', { class: 'ccmy-msg-body' }, mdBody(m.text.replace(CCMY_SUGGEST, '').trim()), m.sessionId || acts.length ? el('div', { class: 'ccmy-acts' }, go(m.sessionId), ...acts) : null);
     return m.cap ? el('div', { class: 'ccmy-msg bot alert ' + m.kind }, el('div', { class: 'ccmy-cap', text: `${m.kind === 'done' ? '✓' : m.kind === 'auto' ? '↻' : '●'} ${m.cap} · ${ccmyAgo(m.at)}` }), body) : el('div', { class: 'ccmy-msg bot' }, body);
   };
+  const was = ccmyThread.scrollTop, stick = CCMY.stick || ccmyThread.scrollHeight - was - ccmyThread.clientHeight < 60; // reading further up: stay there
+  CCMY.stick = false;
   ccmyThread.replaceChildren(...(CCMY.msgs.length ? CCMY.msgs.map((m) => m.who === 'me' ? el('div', { class: 'ccmy-msg me', text: m.text })
     : m.who === 'error' ? el('div', { class: 'ccmy-msg error', text: m.text })
     : m.who === 'note' ? el('div', { class: 'ccmy-msg note', text: m.text })
     : m.who === 'auto' ? el('div', { class: 'ccmy-msg confirm auto' }, el('div', { class: 'ccmy-confirm-head' }, el('b', { text: m.name }), m.chain ? ` 세션에 연결 전송 (${m.chain} 완료)` : ` 세션에 자동 전송 (${m.n}/${m.max})`), el('pre', { text: m.text }), el('div', { class: 'ccmy-acts' }, go(m.sessionId), CCMY.auto.has(m.sessionId) ? el('button', { text: '이어서 진행 끄기', onclick: () => ccmyAutoOff(m.sessionId, '사용자가 껐습니다') }) : null))
-    : m.who === 'confirm' ? el('div', { class: 'ccmy-msg confirm' }, el('div', { class: 'ccmy-confirm-head' }, CCMY_CARD[m.kind]?.[0] || '', el('b', { text: m.name.split('/').pop() }), (CCMY_CARD[m.kind] || CCMY_CARD.send)[1]), el('pre', { text: m.text }),
+    : m.who === 'confirm' ? el('div', { class: 'ccmy-msg confirm' }, el('div', { class: 'ccmy-confirm-head' }, CCMY_CARD[m.kind]?.[0] || '', el('b', { text: m.kind === 'remember' ? m.name.split('/').pop() : m.name }), (CCMY_CARD[m.kind] || CCMY_CARD.send)[1]), el('pre', { text: m.text }),
       m.state === 'ask' ? el('div', { class: 'ccmy-acts' }, el('button', { text: '취소', onclick: () => answer(m, false) }), el('button', { class: 'p', text: (CCMY_CARD[m.kind] || CCMY_CARD.send)[2], onclick: () => answer(m, true) }))
         : el('div', { class: 'ccmy-sent', text: m.state === 'yes' ? (CCMY_CARD[m.kind] || CCMY_CARD.send)[3] : m.state === 'wait' ? '보내는 중…' : '취소함' }))
     : bot(m))
@@ -401,7 +439,7 @@ function ccmyThreadRender() {
   // working: the character with three bouncing dots and what it is doing, as the last bubble of the thread
   if (CCMY.status) ccmyThread.append(el('div', { class: 'ccmy-think' }, ccmyIcon(), el('div', { class: 'ccmy-think-bubble' }, el('span', { class: 'ccmy-dots' }, el('i'), el('i'), el('i')), el('span', { class: 'ccmy-think-text', text: CCMY.status.replace(/…$/, '') }),
     el('button', { 'aria-label': '중지', 'data-tip': '중지', onclick: () => api.ccmyInterrupt() }))));
-  ccmyThread.scrollTop = ccmyThread.scrollHeight;
+  ccmyThread.scrollTop = stick ? ccmyThread.scrollHeight : was;
 }
 // after a change under 모양 › CCMy: redraw the character everywhere; a new model starts a new conversation
 function ccmyApplyLook(modelChanged) {
@@ -409,7 +447,7 @@ function ccmyApplyLook(modelChanged) {
   if (modelChanged) ccmyReset();
   ccmyRender();
 }
-const ccmyGo = (id) => { CCMY.done = CCMY.done.filter((d) => d.id !== id); ccmyToggle(false); openSession(id); };
+const ccmyGo = (id) => { CCMY.done = CCMY.done.filter((d) => d.id !== id); openSession(id); ccmyRender(); }; // the panel stays: the briefing is read next to the session
 const ccmyAgo = (at) => { const m = Math.floor((Date.now() - at) / 60000); return m < 1 ? '방금' : m < 60 ? `${m}분 전` : `${Math.floor(m / 60)}시간 전`; };
 // 세션 tab: a reply goes in as typed text + Enter through the session's attach client (same path as the chat tab). Only offered
 // when the session asked a question (job.needs): a bare "blocked" may be a permission menu, where typed text would pick an option.
@@ -447,7 +485,7 @@ function ccmyRender() {
   // the poll re-renders every few seconds: keep what is being typed, and the caret
   const typed = new Map([...ccmyList.querySelectorAll('input')].map((i) => [i.dataset.id, i.value]));
   const active = document.activeElement?.closest?.('.ccmy-list') ? document.activeElement.dataset.id : null;
-  const card = (s, kind, body, ...extra) => el('div', { class: 'ccmy-card ' + kind },
+  const card = (s, kind, body, ...extra) => el('div', { class: 'ccmy-card ' + kind, 'data-key': kind + s.sessionId },
     el('div', { class: 'ccmy-card-head' }, el('span', { class: 'ccmy-tag', text: kind === 'done' ? '작업 완료' : kind === 'stall' ? '진전 없음' : kind === 'work' ? '작업 중' : kind === 'recent' ? '최근 작업' : s.live ? '입력 대기' : '입력 대기 · 중지됨' }), el('b', { text: s.name })),
     el('div', { class: 'ccmy-body' }, body ? mdBody(body) : null), ...extra); // questions and job details are markdown
   const open = (id) => el('button', { text: '세션 열기', onclick: () => ccmyGo(id) });
@@ -469,13 +507,21 @@ function ccmyRender() {
   const links = [...CCMY.links].map(([id, l]) => el('div', { class: 'ccmy-card auto' }, el('div', { class: 'ccmy-card-head' }, el('span', { class: 'ccmy-tag', text: `협업 ${l.count}/${l.max}` }), el('b', { text: `${l.sides[0].name} ↔ ${l.sides[1].name}` })),
     el('div', { class: 'ccmy-body' }, `목표 :: ${l.goal}${l.sides.some((x) => x.todo || x.inbox.length) ? `\n전달 대기 :: ${l.sides.filter((x) => x.todo || x.inbox.length).map((x) => x.name).join(', ')} (쉬는 때에 전달합니다)` : ''}`),
     el('div', { class: 'ccmy-acts' }, el('button', { text: '끝내기', onclick: () => ccmyLinkOff(id, '사용자가 끝냈습니다') }), el('button', { text: '기록 열기', onclick: () => api.ccmyLinkOpen(id) }), open(l.sides[0].sessionId))));
-  ccmyList.replaceChildren(...[...autos, ...chains, ...links, stale.length > 1 ? el('button', { class: 'ccmy-bulk', text: `중지된 세션의 입력 대기 ${stale.length}건 모두 해제`, onclick: () => setNeedsOff(stale.map((s) => s.sessionId)) }) : null, ...needs.filter(inTab).map(needCard), ...CCMY.done.map((d) => { const s = byId.get(d.id);
+  const cards = [...autos, ...chains, ...links, stale.length > 1 ? el('button', { class: 'ccmy-bulk', text: `중지된 세션의 입력 대기 ${stale.length}건 모두 해제`, onclick: () => setNeedsOff(stale.map((s) => s.sessionId)) }) : null, ...needs.filter(inTab).map(needCard), ...CCMY.done.map((d) => { const s = byId.get(d.id);
     return card(s, 'done', `${s.job?.detail || '세션이 작업을 마쳤습니다'} · ${ccmyAgo(d.at)}`,
       el('div', { class: 'ccmy-acts' }, open(d.id), el('button', { text: '지우기', onclick: () => { CCMY.done = CCMY.done.filter((x) => x.id !== d.id); ccmyRender(); } })));
   }), ...recent.map((s) => { const w = activity(s) === 'working';
     return card(s, w ? (CCMY.stall.has(s.sessionId) ? 'stall' : 'work') : 'recent', `${s.job?.detail || s.lastPrompt || ''}${w ? '' : ` · ${ccmyAgo(s.lastActivity)}`}`.replace(/^ · /, ''),
       el('div', { class: 'ccmy-acts' }, open(s.sessionId), w ? null : el('button', { text: '지우기', onclick: () => { CCMY.dropped.set(s.sessionId, s.lastActivity); ccmyRender(); } })));
-  }), ...needs.filter((s) => !inTab(s)).map(needCard), n || recent.length || autos.length || chains.length || links.length ? null : el('div', { class: 'ccmy-empty' }, '지금 조치할 알림이 없습니다.', el('br'), '세션이 입력을 기다리거나 작업을 마치면 여기에 모입니다.')].filter(Boolean)); // native replaceChildren would print a null as "null"
+  }), ...needs.filter((s) => !inTab(s)).map(needCard), n || recent.length || autos.length || chains.length || links.length ? null : el('div', { class: 'ccmy-empty' }, '지금 조치할 알림이 없습니다.', el('br'), '세션이 입력을 기다리거나 작업을 마치면 여기에 모입니다.')].filter(Boolean); // native replaceChildren would print a null as "null"
+  // the poll comes every few seconds: redraw only when something on the cards changed, and then keep what was scrolled
+  // (a long question being read must not jump back to its top); typed text is not part of the comparison
+  const html = cards.map((c) => c.outerHTML).join('');
+  if (html === CCMY.listHtml && ccmyList.childElementCount) return;
+  CCMY.listHtml = html;
+  const scrolled = new Map([...ccmyList.querySelectorAll('.ccmy-card[data-key]')].map((c) => [c.dataset.key, c.querySelector('.ccmy-body')?.scrollTop || 0]));
+  ccmyList.replaceChildren(...cards);
+  for (const c of ccmyList.querySelectorAll('.ccmy-card[data-key]')) { const t = scrolled.get(c.dataset.key); if (t) c.querySelector('.ccmy-body').scrollTop = t; }
   if (active) ccmyList.querySelector(`input[data-id="${active}"]`)?.focus();
 }
 ccmyRender();

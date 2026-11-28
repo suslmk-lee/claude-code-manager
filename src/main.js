@@ -230,6 +230,8 @@ const ccmyDeps = {
   autoSent: (id, text) => win.webContents.executeJavaScript(`ccmyAutoSent(${JSON.stringify(id)}, ${JSON.stringify(text)})`),
   autoOff: (id, why) => win.webContents.executeJavaScript(`ccmyAutoOff(${JSON.stringify(id)}, ${JSON.stringify(why)})`),
   usage: () => win.webContents.executeJavaScript('getUsage()'),
+  tasks: () => win.webContents.executeJavaScript('ccmyTasks()'),
+  taskEnd: (kind, id) => win.webContents.executeJavaScript(`ccmyTaskEnd(${JSON.stringify(kind)}, ${JSON.stringify(id)})`),
   linkAdd: (l) => win.webContents.executeJavaScript(`ccmyLinkAdd(${JSON.stringify(l)})`),
   chainAdd: (c) => win.webContents.executeJavaScript(`ccmyChainAdd(${JSON.stringify(c)})`),
   chainCheck: (id) => win.webContents.executeJavaScript(`ccmyChainCheck(${JSON.stringify(id)})`),
@@ -238,7 +240,7 @@ const ccmyDeps = {
   changed: (short) => win.webContents.executeJavaScript(`ccmyChanged(${JSON.stringify(short || null)})`),
   dismiss: (ids) => win.webContents.executeJavaScript(`setNeedsOff(${JSON.stringify(ids)})`),
 };
-ipcMain.handle('ccmy:send', (_e, { text, model, conv }) => ccmy.send(conv === 'auto' ? 'auto' : 'chat', text, ccmyDeps, (msg) => send('ccmy:event', msg), model));
+ipcMain.handle('ccmy:send', (_e, { text, model, conv }) => ccmy.send(['auto', 'event'].includes(conv) ? conv : 'chat', text, ccmyDeps, (msg) => send('ccmy:event', msg), model));
 ipcMain.handle('ccmy:confirm', (_e, { id, ok }) => ccmy.confirm(id, ok));
 ipcMain.handle('ccmy:interrupt', () => ccmy.interrupt());
 ipcMain.handle('ccmy:close', (_e, conv) => ccmy.close(conv));

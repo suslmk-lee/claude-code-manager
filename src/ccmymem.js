@@ -44,7 +44,12 @@ const notesFor = (cwd, notes = load()) => notes.filter((n) => n.scope === ALL ||
 
 function journalAdd({ name, cwd, text }, at = new Date()) {
   const dir = path.join(home(), 'journal'), line = `- ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} · ${one(name, 80)}${cwd ? ` (${path.basename(cwd)})` : ''} :: ${one(text)}\n`;
-  fs.mkdirSync(dir, { recursive: true }); fs.appendFileSync(path.join(dir, day(at) + '.md'), line);
+  // a session that stops to ask, goes on and stops again is one piece of work: within MERGE_MIN its newer line replaces the last one
+  const f = path.join(dir, day(at) + '.md'), label = line.slice(8, line.indexOf(' :: ') + 4);
+  let lines = []; try { lines = fs.readFileSync(f, 'utf8').split('\n').filter(Boolean); } catch { /* first line today */ }
+  const last = lines[lines.length - 1] || '', m = /^- (\d\d):(\d\d) /.exec(last);
+  if (m && last.slice(8).startsWith(label) && at.getHours() * 60 + at.getMinutes() - (m[1] * 60 + +m[2]) <= MERGE_MIN) lines.pop();
+  fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(f, [...lines, line.trimEnd()].join('\n') + '\n');
   return line;
 }
 function journalRead({ days = 2, query = '' } = {}, now = new Date()) { // newest day first; only days that have lines
@@ -57,13 +62,15 @@ function journalRead({ days = 2, query = '' } = {}, now = new Date()) { // newes
   }
   return outp.join('\n\n').slice(0, 12000);
 }
-const HANDOFF_KEEP = 5;
+const HANDOFF_KEEP = 5, MERGE_MIN = 10;
 const handoffFile = (cwd) => path.join(home(), 'handoff', String(cwd).replace(/[^A-Za-z0-9가-힣._-]+/g, '-').replace(/^-+/, '').slice(-150) + '.md');
 function handoffAdd(cwd, { name, did, left, blocked }, at = new Date()) { // newest first, the last HANDOFF_KEEP kept
   if (!cwd || !one(did)) return null;
   const f = handoffFile(cwd), none = (t) => one(t) || '없음';
   const entry = `## ${day(at)} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} · ${one(name, 80)}\n- 한 일: ${one(did)}\n- 남은 일: ${none(left)}\n- 막힌 점: ${none(blocked)}\n`;
   let old = []; try { old = fs.readFileSync(f, 'utf8').split(/\n(?=## )/).filter((e) => e.startsWith('## ')); } catch { /* first entry */ }
+  const top = /^## (\d{4}-\d\d-\d\d) (\d\d):(\d\d) · (.*)$/m.exec(old[0] || '');
+  if (top && top[1] === day(at) && top[4] === one(name, 80) && at.getHours() * 60 + at.getMinutes() - (top[2] * 60 + +top[3]) <= MERGE_MIN) old.shift(); // the same work, a little further on
   fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, [entry, ...old].slice(0, HANDOFF_KEEP).map((e) => e.trim()).join('\n\n') + '\n');
   return entry;
 }

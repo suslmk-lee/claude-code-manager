@@ -42,6 +42,14 @@ test('remote: sync uploads sessions, types commands only into live bg sessions, 
   await remote.alert('needs', { id: 'aaaa1111', name: 'A', body: '진행할까요?' });
   assert.deepEqual(calls.shift(), { url: 'http://qm.test/ccm/alert', auth: 'Bearer qmo_x', body: { kind: 'needs', session: 'aaaa1111', name: 'A', body: '진행할까요?' } });
 
+  // 되돌리기 어려운 일은 폰에서 시작하지 않는다 (CCMy 이어서 진행과 같은 금지 목록)
+  commands = [{ id: 4, session: 'aaaa1111', body: 'main 에 머지하고 푸시해줘' }, { id: 5, session: 'aaaa1111', body: '다음 단계 진행해줘' }];
+  sent.length = 0; await remote.tick(); calls.shift();
+  assert.deepEqual(sent.map((x) => x.text), ['다음 단계 진행해줘']);
+  await remote.tick();
+  const third = calls.shift().body.done;
+  assert.deepEqual(third.map((d) => [d.id, d.ok]), [[4, false], [5, true]]); assert.match(third[0].note, /폰에서 시킬 수 없습니다/);
+
   remote.setEnabled(false);
   assert.equal(remote.alert('done', { id: 'aaaa1111' }), null); // 꺼 두면 보내지 않는다
 });

@@ -36,3 +36,13 @@ test('handoff: per folder, newest first, only the last five kept', () => {
   assert.equal(mem.handoffRead('/w/bar'), '');
   assert.equal(mem.handoffAdd('/w/foo', { name: 'x', did: ' ' }), null);
 });
+test('one piece of work is one line: a newer entry of the same session within ten minutes replaces the last one', () => {
+  const at = (h, m) => new Date(2026, 10, 20, h, m);
+  mem.journalAdd({ name: 'api', cwd: '/w/foo', text: '질문하며 멈춤' }, at(9, 0));
+  mem.journalAdd({ name: 'api', cwd: '/w/foo', text: '수정 완료' }, at(9, 6));
+  mem.journalAdd({ name: '문서', cwd: '/w/foo', text: '다른 세션' }, at(9, 7));
+  mem.journalAdd({ name: 'api', cwd: '/w/foo', text: '다음 작업' }, at(9, 30));
+  assert.equal(mem.journalRead({ days: 1 }, at(10, 0)), '## 2026-11-20\n- 09:06 · api (foo) :: 수정 완료\n- 09:07 · 문서 (foo) :: 다른 세션\n- 09:30 · api (foo) :: 다음 작업');
+  mem.handoffAdd('/w/merge', { name: 'api', did: '하는 중' }, at(9, 0)); mem.handoffAdd('/w/merge', { name: 'api', did: '끝냄' }, at(9, 5)); mem.handoffAdd('/w/merge', { name: 'api', did: '다음' }, at(9, 40));
+  const t = mem.handoffRead('/w/merge'); assert.equal(t.split('## ').length - 1, 2); assert.ok(!t.includes('하는 중')); assert.match(t, /^## 2026-11-20 09:40 · api\n- 한 일: 다음/);
+});
