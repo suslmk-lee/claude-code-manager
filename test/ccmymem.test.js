@@ -27,3 +27,12 @@ test('journal: one line per piece of work, read back by day and by word', () => 
   assert.match(mem.journalRead({ days: 7 }, now), /2026-11-27[\s\S]*2026-11-26\n- 09:03 · api 수정 \(foo\) :: 로그인 오류 수정/);
   assert.equal(mem.journalRead({ days: 7, query: '로그인' }, now), '## 2026-11-26\n- 09:03 · api 수정 (foo) :: 로그인 오류 수정');
 });
+test('handoff: per folder, newest first, only the last five kept', () => {
+  assert.equal(mem.handoffRead('/w/foo'), '');
+  for (let i = 1; i <= 6; i++) mem.handoffAdd('/w/foo', { name: 's' + i, did: '일 ' + i, left: i === 6 ? '배포 확인' : '', blocked: '' }, new Date(2026, 10, 28, 10, i));
+  const t = mem.handoffRead('/w/foo');
+  assert.match(t, /^## 2026-11-28 10:06 · s6\n- 한 일: 일 6\n- 남은 일: 배포 확인\n- 막힌 점: 없음/);
+  assert.equal(t.split('## ').length - 1, 5); assert.ok(!t.includes('· s1\n'));
+  assert.equal(mem.handoffRead('/w/bar'), '');
+  assert.equal(mem.handoffAdd('/w/foo', { name: 'x', did: ' ' }), null);
+});

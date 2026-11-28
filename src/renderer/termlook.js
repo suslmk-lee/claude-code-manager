@@ -147,6 +147,8 @@ function uiSwatch(a) { // mini app window: header strip with the accent dot, bod
 let lookPage = 'app'; // the section last viewed; reopening lands there
 function closeLook() { const d = $('#term-look'); if (d) { if (d.open) d.close(); d.remove(); } }
 // 모양: a centred modal — sections down the left (앱 테마 · 카드 스타일 · 터미널 · 터미널 테마), the chosen one on the right
+// a number field bound to LOOK[key], clamped to lo…hi
+const lookNum = (key, def, lo, hi, step) => el('input', { type: 'number', min: String(lo), max: String(hi), step: String(step), value: String(LOOK[key] || def), onchange: (e) => { const n = Number(e.target.value); LOOK[key] = Number.isFinite(n) && n >= lo ? Math.min(n, hi) : def; e.target.value = String(LOOK[key]); applyLook(); } });
 function openLook() {
   if ($('#term-look')) return closeLook();
   const fonts = FONT_CANDIDATES.filter(hasFont);
@@ -176,7 +178,13 @@ function openLook() {
       el('p', { class: 'hint', text: '꺼 두면(기본) 클릭이 Claude 화면의 메뉴를 열지 않습니다. 예전엔 상태줄을 클릭하면 백그라운드 에이전트 목록이 열려 거기서 입력한 프롬프트가 새 세션 "(2)"로 가곤 했습니다. 휠 스크롤은 그대로 전달됩니다.' }))],
     ['notify', '알림', () => el('div', {},
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.doneNotify === 'off' ? null : '', onchange: (e) => { LOOK.doneNotify = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 작업이 끝나면 알림'),
-      el('p', { class: 'hint', text: '10초 넘게 작업하던 세션이 멈추면 소리와 함께 알립니다. 지금 보고 있는 세션은 알리지 않습니다. 입력 대기 알림은 항상 켜져 있습니다.' }))],
+      el('p', { class: 'hint', text: '10초 넘게 작업하던 세션이 멈추면 소리와 함께 알립니다. 지금 보고 있는 세션은 알리지 않습니다. 입력 대기 알림은 항상 켜져 있습니다.' }),
+      el('div', { class: 'look-label', text: '자리 비움 알림' }),
+      (() => { const msg = el('span', { class: 'hint' }); const url = el('input', { type: 'password', placeholder: 'https:' + '/' + '/hooks.slack.com/services/…', value: LOOK.ccmyHook || '', autocomplete: 'off', onchange: (e) => { LOOK.ccmyHook = e.target.value.trim(); applyLook(); } });
+        return el('div', {}, el('div', { class: 'ccmy-note-add' }, url, el('button', { text: '시험 전송', onclick: async () => { msg.textContent = '보내는 중…'; try { const r = await api.ccmyAway({ url: url.value.trim(), text: 'CCMy :: 시험 알림입니다', force: true }); msg.textContent = r.sent ? '보냈습니다' : `실패 (응답 ${r.status})`; } catch (e) { msg.textContent = '실패: ' + String(e.message).replace(/^.*?Error: /, ''); } } })), msg); })(),
+      el('label', { class: 'look-field' }, '자리 비움 기준', lookNum('ccmyHookIdle', 3, 1, 120, 1), '분'),
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmyHookBody === 'on' ? '' : null, onchange: (e) => { LOOK.ccmyHookBody = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 세션의 질문 · 작업 내용도 함께 보내기'),
+      el('p', { class: 'hint', text: '웹훅 주소(Slack 수신 웹훅 형식, { "text": … })를 넣으면 CCMy 알림을 그 주소로도 보냅니다. 키보드 · 마우스를 이 시간 동안 건드리지 않았을 때만 보냅니다. 기본은 "입력 대기 :: 세션 이름" 한 줄만 나가고, 위 항목을 켜면 질문이나 작업 내용 300자까지 함께 나갑니다. 주소는 이 PC에만 저장됩니다. 비워 두면 아무것도 보내지 않습니다.' }))],
     ['ccmy', 'CCMy', () => el('div', {},
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmy === 'off' ? null : '', onchange: (e) => { LOOK.ccmy = e.target.checked ? 'on' : 'off'; applyLook(); ccmyApplyLook(); } }), ' CCMy 버블 표시'),
       el('p', { class: 'hint', text: '화면 구석에 떠 있는 에이전트입니다. 세션 상태를 묻거나 세션에 시킬 일을 말하면 대신 확인하고 전달합니다. 끌어서 옮길 수 있습니다.' }),
@@ -184,12 +192,16 @@ function openLook() {
       el('p', { class: 'hint', text: '입력 대기 · 작업 완료가 생기면 CCMy가 그 세션의 최근 대화를 읽고 무슨 일인지 알려 줍니다. 알림마다 토큰을 조금 씁니다. 꺼도 대화는 할 수 있습니다.' }),
       el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmySound === 'off' ? null : '', onchange: (e) => { LOOK.ccmySound = e.target.checked ? 'on' : 'off'; applyLook(); if (e.target.checked) ccmyRing(); } }), ' 알림 소리'),
       el('p', { class: 'hint', text: '입력 대기 · 작업 완료 알림이 오면 버블이 커졌다 돌아오면서 소리를 냅니다. 켜 두면 시스템 알림의 소리는 끄고 이 소리만 냅니다. 끄면 버블만 움직입니다.' }),
+      el('label', { class: 'look-check' }, el('input', { type: 'checkbox', checked: LOOK.ccmyWatch === 'off' ? null : '', onchange: (e) => { LOOK.ccmyWatch = e.target.checked ? 'on' : 'off'; applyLook(); } }), ' 막힌 세션 · 사용량 감시'),
+      el('label', { class: 'look-field' }, '진전 없음 알림', lookNum('ccmyStall', 15, 3, 120, 1), '분'),
+      el('label', { class: 'look-field' }, '사용량 경고', lookNum('ccmyUsagePct', 90, 50, 99, 1), '%'),
+      el('p', { class: 'hint', text: '작업 중인 세션이 이 시간 동안 아무것도 쓰지 않으면(멈춘 명령, 끝나지 않는 반복) 알립니다. 5시간 · 7일 사용량이 이 비율을 넘으면 창마다 한 번 알립니다. 5시간 사용량이 95%를 넘으면 이어서 진행은 스스로 답하지 않습니다.' }),
       el('label', { class: 'look-field' }, '모델', el('select', { onchange: (e) => { LOOK.ccmyModel = e.target.value; applyLook(); ccmyApplyLook(true); } }, // a <select>, not a datalist: select.js themes its list
         ...[...new Set(['haiku', 'sonnet', 'opus', 'fable', ccmyModel()])].map((m) => el('option', { value: m, text: m === 'haiku' ? 'haiku (기본)' : m, selected: m === ccmyModel() ? '' : null })))),
       el('p', { class: 'hint', text: '기본은 haiku 입니다. sonnet · opus · fable 은 판단이 낫지만 알림 요약마다 드는 토큰이 늘어납니다. 바꾸면 CCMy와의 대화가 새로 시작됩니다.' }),
       el('div', { class: 'look-label', text: '캐릭터' }),
       el('div', { class: 'ccmy-pick' }, ...Object.entries(CCMY_CHARS).map(([id, [name]]) => { const b = el('button', { type: 'button', class: id === ccmyChar() ? 'sel' : '', 'data-id': id, onclick: () => { LOOK.ccmyChar = id; applyLook(); ccmyApplyLook(); for (const x of b.parentNode.children) x.classList.toggle('sel', x === b); } }, el('span', { text: name })); b.insertAdjacentHTML('afterbegin', ccmyCharSvg(id)); return b; })))],
-    ['ccmyAuto', '이어서 진행', () => { const num = (key, def, lo, hi, step) => el('input', { type: 'number', min: String(lo), max: String(hi), step: String(step), value: String(LOOK[key] || def), onchange: (e) => { const n = Number(e.target.value); LOOK[key] = Number.isFinite(n) && n >= lo ? Math.min(n, hi) : def; e.target.value = String(LOOK[key]); applyLook(); } });
+    ['ccmyAuto', '이어서 진행', () => { const num = lookNum;
       return el('div', {},
         el('p', { class: 'hint', text: '세션 탭을 우클릭해 「CCMy 이어서 진행…」을 켜면, 그 세션이 멈출 때마다 CCMy가 대화를 읽고 목표 안에서 답을 보내 작업을 이어 가게 합니다. 여기서는 그 기본값을 정합니다. 횟수와 시간은 켤 때마다 세션별로 바꿀 수 있습니다.' }),
         el('label', { class: 'look-field' }, '결정 모델', el('select', { onchange: (e) => { LOOK.ccmyAutoModel = e.target.value; applyLook(); api.ccmyClose('auto'); } },
@@ -199,7 +211,7 @@ function openLook() {
         el('p', { class: 'hint', text: '한 세션에 CCMy가 스스로 보낼 수 있는 답의 수입니다 (1 ~ 30). 다 쓰면 이어서 진행이 꺼지고 알림으로 돌아갑니다.' }),
         el('label', { class: 'look-field' }, '시간', num('ccmyAutoHours', 2, 0.25, 24, 0.25), '시간'),
         el('p', { class: 'hint', text: '켠 뒤 이 시간이 지나면 꺼집니다 (0.25 ~ 24).' }),
-        el('p', { class: 'hint', text: '바꿀 수 없는 것 :: 머지 · 푸시 · 배포 · 릴리스 · 삭제 · 결제 · 외부 전송에 관한 질문과 권한 승인 메뉴에는 답하지 않고 항상 알림으로 넘깁니다. 앱을 다시 켜면 이어서 진행은 모두 꺼집니다.' })); }],
+        el('p', { class: 'hint', text: '바꿀 수 없는 것 :: 머지 · 푸시 · 배포 · 릴리스 · 삭제 · 결제 · 외부 전송에 관한 질문과 권한 승인 메뉴에는 답하지 않고 항상 알림으로 넘깁니다. 앱을 다시 켜도 켜 둔 이어서 진행은 남은 횟수 · 시간과 함께 이어집니다.' })); }],
     ['ccmyMem', '기억', () => { // CCMy's memory folder (src/ccmymem.js): the notes it follows, and the work journal switch
       const list = el('div', { class: 'ccmy-notes' }), where = el('code', {});
       const scope = el('select', {}, el('option', { value: '', text: '전체' }), ...[...new Set(S.sessions.filter((x) => S.tabs.includes(x.sessionId) && x.cwd).map((x) => x.cwd))].map((c) => el('option', { value: c, text: c.split('/').pop() })));

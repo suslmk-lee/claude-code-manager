@@ -130,6 +130,25 @@ binary of ~230MB) are excluded from the bundle: the app always runs the Claude C
   needs-input / finished alert is handed to it, so it reads the session and briefs (one-line peek beside the bubble; the
   panel opens on a click only). 이어서 진행 (tab menu, with a goal): CCMy answers a stopped session by itself — at most
   5 sends / 2 h, never merge · push · deploy · delete · payment · outward messages, never a permission menu. 세션: the plain card list. Drag to move; 모양 › 알림 hides it or turns the briefing off.
+- **CCMy 도구 (추가)** — `check_repo`: read-only git facts of a session's folder (branch, uncommitted files, change
+  size, last commits, one file's diff), so a session's "done" is checked rather than believed. `start_session` /
+  `resume_session` / `stop_session`: each waits for a click on its card, chat conversation only; a new session takes the
+  options last used in the new-session dialog, a stopped background job restarts in place (respawn).
+- **CCMy 감시** — no model call (모양 › CCMy): a session that reads as working but wrote nothing for 15 min rings once
+  (and is briefed like any alert), 5 h / 7 d usage at 90 % rings once per window; at 95 % of the 5 h window 이어서 진행
+  stops answering by itself. `usage` tool for "사용량 얼마나 남았어".
+- **CCMy 연결 · 유지 · 자리 비움** — `when_done` (card) + `relay`: "when A finishes, give B this"; the agent reads A and
+  sends the instruction plus A's result to B without asking again (one shot, 24 h; words from the forbidden list that
+  were not in the approved instruction go back to a confirm card). `send_to_session` takes `also` for several sessions
+  on one card. 이어서 진행 and 연결 are kept in localStorage `ccmyState` and picked up after a restart. Handoff memo:
+  the journal call also writes 한 일 / 남은 일 / 막힌 점 to `handoff/<folder>.md` (last 5), appended to the first
+  prompt of a session CCMy starts there. 모양 › 알림 › 자리 비움 알림: alerts as `{ text }` to a webhook, only after N
+  idle minutes (`powerMonitor`); session name only unless the body option is on.
+- **CCMy 협업** — `link_sessions` (card): two background sessions that develop together. A session ends a reply with
+  `@@협업 요청|알림|참고|완료 … @@끝`; when it stops the app reads the block from its transcript, appends it to
+  `~/.claude/ccmy/links/<id>.md` and types it into the partner once that one is idle (`src/ccmylink.js`, no model in
+  between). 10 deliveries / 4 h by default, ends when both said 완료; kept across restarts. A file both sessions write
+  was tried first and dropped: a background session edits inside its own git worktree.
 - **CCMy 기억** — plain files in `~/.claude/ccmy` (`src/ccmymem.js`), editable by hand and under 모양 › 기억. `notes.md`:
   지침 CCMy follows after a restart, `# 전체` for everything and `# <folder>` for sessions in that folder (이어서 진행
   included); saved from the conversation only after a 저장 click, never from an 이어서 진행 decision, and they cannot lift

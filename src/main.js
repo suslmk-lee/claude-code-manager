@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, webContents, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const pty = require('node-pty');
@@ -7,6 +7,7 @@ const data = require('./data');
 const chat = require('./chat');
 const ccmy = require('./ccmy');
 const ccmymem = require('./ccmymem');
+const ccmylink = require('./ccmylink');
 const appusage = require('./appusage'); // 사내 앱 사용 기록 (QuantumMate)
 
 data.setCacheDir(path.join(app.getPath('userData'), 'cache'));
@@ -227,6 +228,13 @@ const ccmyDeps = {
   autoCheck: (id) => win.webContents.executeJavaScript(`ccmyAutoCheck(${JSON.stringify(id)})`),
   autoSent: (id, text) => win.webContents.executeJavaScript(`ccmyAutoSent(${JSON.stringify(id)}, ${JSON.stringify(text)})`),
   autoOff: (id, why) => win.webContents.executeJavaScript(`ccmyAutoOff(${JSON.stringify(id)}, ${JSON.stringify(why)})`),
+  usage: () => win.webContents.executeJavaScript('getUsage()'),
+  linkAdd: (l) => win.webContents.executeJavaScript(`ccmyLinkAdd(${JSON.stringify(l)})`),
+  chainAdd: (c) => win.webContents.executeJavaScript(`ccmyChainAdd(${JSON.stringify(c)})`),
+  chainCheck: (id) => win.webContents.executeJavaScript(`ccmyChainCheck(${JSON.stringify(id)})`),
+  chainDone: (id, text) => win.webContents.executeJavaScript(`ccmyChainDone(${JSON.stringify(id)}, ${JSON.stringify(text)})`),
+  newOpts: () => win.webContents.executeJavaScript('ccmyNewOpts()'),
+  changed: (short) => win.webContents.executeJavaScript(`ccmyChanged(${JSON.stringify(short || null)})`),
   dismiss: (ids) => win.webContents.executeJavaScript(`setNeedsOff(${JSON.stringify(ids)})`),
 };
 ipcMain.handle('ccmy:send', (_e, { text, model, conv }) => ccmy.send(conv === 'auto' ? 'auto' : 'chat', text, ccmyDeps, (msg) => send('ccmy:event', msg), model));
@@ -238,6 +246,18 @@ ipcMain.handle('ccmy:notes', () => ({ home: ccmymem.home(), notes: ccmymem.load(
 ipcMain.handle('ccmy:noteAdd', (_e, { text, scope }) => ccmymem.add(text, scope));
 ipcMain.handle('ccmy:noteDel', (_e, { text, scope }) => ccmymem.del(text, scope).length);
 ipcMain.handle('ccmy:journal', (_e, req) => ccmy.journal(req));
+// 자리 비움 알림: one line to the user's webhook ({ text }, the Slack incoming-webhook shape), only after idleMin without keyboard or mouse
+ipcMain.handle('ccmy:away', async (_e, { url, idleMin, text, force }) => {
+  if (!/^https:\/\//i.test(String(url))) throw new Error('https:// 로 시작하는 주소만 쓸 수 있습니다');
+  if (!force && powerMonitor.getSystemIdleTime() < idleMin * 60) return { sent: false };
+  const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: String(text).slice(0, 600) }), signal: AbortSignal.timeout(8000) });
+  return { sent: r.ok, status: r.status };
+});
+// 협업 (src/ccmylink.js): the window asks for the @@협업 blocks in a session's last replies, and has what it passed on written down
+ipcMain.handle('ccmy:linkScan', async (_e, sessionId) => ((await data.transcript(sessionId, { limit: 30 }))?.turns || []).filter((u) => u.role === 'assistant')
+  .flatMap((u) => ccmylink.parse(u.text).map((b) => ({ ...b, key: `${u.ts || u.i}:${b.kind}:${b.text.slice(0, 60)}` }))));
+ipcMain.handle('ccmy:linkWrite', (_e, { id, entries }) => { ccmylink.append(id, entries); return true; });
+ipcMain.handle('ccmy:linkOpen', (_e, id) => shell.openPath(ccmylink.file(id)));
 ipcMain.handle('ccmy:openHome', () => { fs.mkdirSync(ccmymem.home(), { recursive: true }); return shell.openPath(ccmymem.home()); });
 
 // ---- live transcript tail (one watched file at a time) ----

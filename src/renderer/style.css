@@ -801,7 +801,7 @@ html .ccmy-head .x { all:unset; width:28px; height:28px; border-radius:8px; text
 .ccmy-chat { flex:1; min-height:0; display:flex; flex-direction:column; } .ccmy-list { flex:1; min-height:0; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
 .ccmy-thread { flex:1; min-height:0; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
 .ccmy-msg { max-width:90%; align-self:flex-start; border-radius:4px 18px 18px 18px; background:var(--raised); border:1px solid var(--line); font-size:12.5px; overflow:hidden; overflow-wrap:anywhere; }
-.ccmy-msg-body { padding:10px 15px; } .ccmy-msg .md-body { background:none; border:none; padding:0; margin:0; box-shadow:none; font-size:12.5px; } .ccmy-msg .md-body > :first-child { margin-top:0; } .ccmy-msg .md-body > :last-child { margin-bottom:0; }
+.ccmy-msg-body { padding:10px 15px; } .ccmy-msg .md-body, .ccmy-body .md-body { background:none; border:none; padding:0; margin:0; box-shadow:none; font-size:12.5px; white-space:normal; } #ccmy .md-body > :first-child { margin-top:0; } #ccmy .md-body > :last-child { margin-bottom:0; }
 .ccmy-msg.me { align-self:flex-end; max-width:80%; padding:9px 15px; border-radius:18px 18px 4px 18px; background:var(--acc); border-color:var(--acc); color:#1d1310; font-weight:500; white-space:pre-wrap; }
 .ccmy-cap { padding:5px 15px; font-size:11.5px; font-weight:600; background:color-mix(in srgb, var(--ok) 13%, transparent); color:color-mix(in srgb, var(--ok) 75%, var(--fg)); } .ccmy-msg.alert.needs .ccmy-cap { background:color-mix(in srgb, var(--warn) 13%, transparent); color:color-mix(in srgb, var(--warn) 80%, var(--fg)); }
 .ccmy-msg.error { padding:9px 15px; color:var(--bad, #e06c75); border-color:color-mix(in srgb, var(--bad, #e06c75) 40%, var(--line)); white-space:pre-wrap; }
@@ -826,6 +826,7 @@ html .ccmy-ask textarea { all:unset; flex:1; min-width:0; max-height:120px; padd
 html .ccmy-ask button { all:unset; flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(135deg, color-mix(in srgb, var(--acc) 75%, #fff), var(--acc)); color:#1a1210; font-weight:700; cursor:pointer; }
 /* 세션 tab: plain cards */
 .ccmy-card { padding:10px 14px; border-radius:16px; background:var(--raised); border:1px solid var(--line); }
+.ccmy-card.stall .ccmy-tag { background:var(--warn); color:#1a1a1a; }
 .ccmy-card.needs { border-color:color-mix(in srgb, var(--warn) 45%, var(--line)); background:var(--card-bg); }
 .ccmy-card-head { display:flex; align-items:center; gap:8px; min-width:0; } .ccmy-card-head b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ccmy-tag { flex:none; padding:0 7px; border-radius:7px; font-size:10.5px; font-weight:700; line-height:1.6; background:var(--ok); color:#10261a; } .ccmy-card.needs .ccmy-tag { background:var(--warn); color:#1a1a1a; }

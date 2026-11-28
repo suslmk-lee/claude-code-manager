@@ -149,6 +149,7 @@ function trackDone() {
     // CCMy 작업 일지: work of 10 s or more that ended, or stopped on a question (a bare wait may be a permission menu mid-work)
     if (Date.now() - since >= 10000 && (a !== 'blocked' || s.job?.needs) && !(typeof LOOK !== 'undefined' && LOOK.ccmyJournal === 'off')) api.ccmyJournal({ sessionId: id, name: s.name, cwd: s.cwd, fallback: s.job?.detail || s.lastPrompt || '' }).catch(() => {});
     if (a === 'blocked') continue;
+    if (typeof ccmyChainFire === 'function') ccmyChainFire(s); // CCMy 연결: "when this one finishes, give that one …"
     // CCMy 이어서 진행: every stop counts, short turns and the session on screen included; it answers instead of notifying
     if (typeof ccmyAutoOn === 'function' && ccmyAutoOn(id)) { if (ccmyAutoStep(s, '작업을 멈춤')) continue; }
     if (Date.now() - since < 10000) continue;
@@ -171,7 +172,7 @@ function trackNeedsInput() {
   api.setBadge(now.size);
   const btn = $('#btn-sessions');
   btn.replaceChildren('세션 ▾', now.size ? el('span', { class: 'pill', text: String(now.size) }) : '');
-  if (typeof ccmyRender === 'function') ccmyRender();
+  if (typeof ccmyRender === 'function') { ccmyRender(); ccmyTick(); }
 }
 function notifyNeedsInput(s) {
   S.unseen.add(s.sessionId);

@@ -2,6 +2,8 @@
 // CCMy's memory: plain files in one folder (~/.claude/ccmy), so the user can open and edit them.
 //   notes.md               지침. "# 전체" applies everywhere, "# <folder>" to sessions in that folder and below; one "- …" line each
 //   journal/YYYY-MM-DD.md  작업 일지. one "- HH:MM · <session> (<folder>) :: <what was done>" line per finished piece of work
+//   handoff/<folder>.md      인수인계 메모. per project folder, the last few "한 일 / 남은 일 / 막힌 점" entries; goes into the first
+//                          prompt of a session CCMy starts in that folder
 // Notes reach the agent's prompt, so they are small on purpose: one line each, capped in length and number.
 const fs = require('fs');
 const os = require('os');
@@ -55,4 +57,15 @@ function journalRead({ days = 2, query = '' } = {}, now = new Date()) { // newes
   }
   return outp.join('\n\n').slice(0, 12000);
 }
-module.exports = { ALL, home, load, add, del, notesFor, format, parse, journalAdd, journalRead };
+const HANDOFF_KEEP = 5;
+const handoffFile = (cwd) => path.join(home(), 'handoff', String(cwd).replace(/[^A-Za-z0-9가-힣._-]+/g, '-').replace(/^-+/, '').slice(-150) + '.md');
+function handoffAdd(cwd, { name, did, left, blocked }, at = new Date()) { // newest first, the last HANDOFF_KEEP kept
+  if (!cwd || !one(did)) return null;
+  const f = handoffFile(cwd), none = (t) => one(t) || '없음';
+  const entry = `## ${day(at)} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')} · ${one(name, 80)}\n- 한 일: ${one(did)}\n- 남은 일: ${none(left)}\n- 막힌 점: ${none(blocked)}\n`;
+  let old = []; try { old = fs.readFileSync(f, 'utf8').split(/\n(?=## )/).filter((e) => e.startsWith('## ')); } catch { /* first entry */ }
+  fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, [entry, ...old].slice(0, HANDOFF_KEEP).map((e) => e.trim()).join('\n\n') + '\n');
+  return entry;
+}
+function handoffRead(cwd) { try { return fs.readFileSync(handoffFile(cwd), 'utf8').trim(); } catch { return ''; } }
+module.exports = { handoffAdd, handoffRead, ALL, home, load, add, del, notesFor, format, parse, journalAdd, journalRead };
