@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld('api', {
   ccmyNoteDel: (text, scope) => ipcRenderer.invoke('ccmy:noteDel', { text, scope }),
   ccmyJournal: (req) => ipcRenderer.invoke('ccmy:journal', req),
   ccmyAway: (req) => ipcRenderer.invoke('ccmy:away', req),
+  remoteSet: (on) => ipcRenderer.invoke('remote:set', on),
+  remoteAlert: (kind, s) => ipcRenderer.invoke('remote:alert', { kind, s }),
   ccmyLinkScan: (sessionId) => ipcRenderer.invoke('ccmy:linkScan', sessionId),
   ccmyLinkWrite: (id, entries) => ipcRenderer.invoke('ccmy:linkWrite', { id, entries }),
   ccmyLinkOpen: (id) => ipcRenderer.invoke('ccmy:linkOpen', id),
